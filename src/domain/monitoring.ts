@@ -1,0 +1,128 @@
+export type Topic = {
+  id: string;
+  title: string;
+  description: string;
+  legal_basis?: string;
+  origin: "ai" | "user";
+  selected: boolean;
+};
+export type Source = {
+  id: string;
+  name: string;
+  section:
+    "government_federal" | "government_cantonal" | "non_government" | "signal";
+  type:
+    | "court"
+    | "law"
+    | "authority"
+    | "consultation"
+    | "association"
+    | "linkedin"
+    | "website"
+    | "competitor"
+    | "newsletter"
+    | "rss";
+  url?: string;
+  active: boolean;
+  requested?: boolean;
+  canton?: string;
+};
+export type Delivery = {
+  frequency: "instant" | "weekly" | "both";
+  channels: ("email" | "teams" | "slack")[];
+  relevance_threshold: "high" | "all";
+  digest_day?: string;
+  digest_time?: string;
+};
+export type MonitoringProfile = {
+  id: string;
+  name: string;
+  status: "active" | "paused";
+  topics: Topic[];
+  sources: Source[];
+  delivery: Delivery;
+  created_at: string;
+  updated_at: string;
+};
+export type Update = {
+  id: string;
+  profile_id: string;
+  source_id: string;
+  topic_ids: string[];
+  headline: string;
+  summary: string;
+  why_it_matters: string;
+  relevance: "high" | "medium";
+  url?: string;
+  published_at: string;
+  read: boolean;
+  saved: boolean;
+  hidden: boolean;
+  note?: string;
+  feedback?: "relevant" | "not_relevant";
+  feedback_reason?: string;
+  client_name: string;
+  source_name: string;
+  source_section: Source["section"];
+  topic_title: string;
+  legal_basis: string;
+};
+export type SourceRecord = {
+  update: Update;
+  title: string;
+  body: string;
+  disclosure: string;
+};
+export type Draft = {
+  input: string;
+  missing: string;
+  generated: boolean;
+  editing_id?: string;
+  profile: MonitoringProfile;
+};
+export type Account = {
+  name: string;
+  email: string;
+  firm: string;
+  password_hash?: string;
+  password_salt?: string;
+  quiet_start: string;
+  quiet_end: string;
+  defaults: Delivery;
+};
+export type AIxState = {
+  version: 1;
+  draft: Draft | null;
+  profiles: MonitoringProfile[];
+  updates: Update[];
+  account: Account;
+};
+export type AIxConfig = {
+  publicDisclosure: boolean;
+  operatorControls: boolean;
+  processingModel: string;
+  deployment: string;
+  hostingLocation: string;
+};
+export interface MonitoringBackend {
+  suggestTopics(input: string): Promise<Topic[]>;
+  suggestSources(topics: Topic[]): Promise<Source[]>;
+  createProfile(profile: MonitoringProfile): Promise<MonitoringProfile>;
+  updateProfile(profile: MonitoringProfile): Promise<MonitoringProfile>;
+  getProfiles(): Promise<MonitoringProfile[]>;
+  getUpdates(profileId: string): Promise<Update[]>;
+  getUpdate(id: string): Promise<Update>;
+  saveUpdate(id: string, saved: boolean): Promise<void>;
+  addNote(id: string, note: string): Promise<void>;
+  submitFeedback(
+    id: string,
+    feedback: "relevant" | "not_relevant",
+    reason?: string,
+  ): Promise<void>;
+  markRead(id: string): Promise<void>;
+  getSourceRecord(id: string): Promise<SourceRecord>;
+  getDeliveryPreview(profile?: MonitoringProfile): Promise<Update | null>;
+  addCanton(canton: string): Promise<Source[]>;
+  deleteProfile(id: string, confirmation: string): Promise<void>;
+  duplicateProfile(id: string): Promise<MonitoringProfile>;
+}
