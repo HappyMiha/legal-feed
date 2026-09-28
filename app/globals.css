@@ -295,6 +295,13 @@ h3 {
   border-radius: 50%;
   font-size: 14px;
 }
+.avatar [data-slot="avatar-image"] {
+  object-fit: cover;
+}
+.avatar [data-slot="avatar-fallback"] {
+  background: #343a44;
+  color: inherit;
+}
 .app-main {
   flex: 1;
   min-width: 0;

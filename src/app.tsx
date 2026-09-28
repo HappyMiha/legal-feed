@@ -17,6 +17,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Empty } from "@/components/ui/empty";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BrandLockup } from "./components/brand";
 import { Button } from "./components/controls";
 import type { AIxConfig, MonitoringProfile, Update } from "./domain/monitoring";
@@ -304,9 +305,12 @@ export default function AIxApp({ config }: { config: AIxConfig }) {
             Settings
           </button>
           <div className="account-lockup">
-            <span className="avatar">
-              {(state?.account.name || "Anna").slice(0, 1)}
-            </span>
+            <Avatar className="avatar" aria-hidden="true">
+              <AvatarImage src="/images/anna-avatar.png" alt="" />
+              <AvatarFallback>
+                {(state?.account.name || "Anna").slice(0, 1)}
+              </AvatarFallback>
+            </Avatar>
             <div>
               {state?.account.name || "Anna"}
               <small>{state?.account.firm || "Personal account"}</small>
