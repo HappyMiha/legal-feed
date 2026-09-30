@@ -12,3 +12,7 @@ Known deviations: Product shell and feed composed specifically for the three per
 ## Framework provenance
 
 The separate AIx repository uses the Sites portable Vinext starter, React, TypeScript, Radix/Shadcn primitives and Cloudflare Workers packaging. Starter primitives in `components/ui` remain unchanged. This is infrastructure reuse, not a new brand.
+
+## Legal Feed production derivative — 2026-09-30
+
+This repository derives from HappyMiha/helvetic-lens-aix. Its existing routes, components, styles and onboarding sequence form the product UI. Branding is now Legal Feed. The deterministic AIx backend, fictional source fixtures, recovery controls and demo service worker were removed. Production services live in src/server; authenticated APIs in app/api; the client adapter in src/production. Original upstream attribution and Apache-2.0 license are retained.

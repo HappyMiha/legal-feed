@@ -23,7 +23,7 @@ import {
   sections,
 } from "../components/controls";
 import type {
-  AIxState,
+  AppState,
   Draft,
   MonitoringProfile,
   Source,
@@ -31,7 +31,7 @@ import type {
   Update,
 } from "../domain/monitoring";
 import { stateStore, validSignalUrl } from "../platform/storage";
-import { monitoringBackend } from "../aix/aix-monitoring-backend";
+import { monitoringBackend } from "../production/backend";
 import type { Actions } from "../app";
 const steps = ["topics", "sources", "delivery", "review"];
 const cantons = [
@@ -68,7 +68,7 @@ export function Wizard({
   actions,
 }: {
   step: string;
-  state: AIxState;
+  state: AppState;
   actions: Actions;
 }) {
   const draft = state.draft;
@@ -81,7 +81,7 @@ export function Wizard({
       stateStore.write({ ...stateStore.read(), draft: next });
     } catch {
       toast.error(
-        "Could not save your progress. Check browser storage and try again.",
+        "Could not save your draft. Please try again.",
       );
     }
   };
@@ -611,7 +611,7 @@ function Sources({
           section: "signal",
           url,
           active: true,
-          requested: true,
+          requested: false,
         },
       ],
     });
@@ -718,7 +718,7 @@ function Sources({
                 <strong>{s.name}</strong>
                 <p className="muted">{s.url}</p>
               </div>
-              <span className="badge">requested</span>
+              <span className="badge">{s.active ? s.type === "linkedin" ? "public posts" : "queued" : "paused"}</span>
               <Switch
                 checked={s.active}
                 onCheckedChange={(active) =>
@@ -810,7 +810,7 @@ function Delivery({
   const d = profile.delivery;
   const [preview, setPreview] = useState<Update | null>(null);
   useEffect(() => {
-    void monitoringBackend.getDeliveryPreview(profile).then(setPreview);
+    void monitoringBackend.getDeliveryPreview(profile).then(setPreview).catch(()=>setPreview(null));
   }, [profile]);
   return (
     <>
@@ -874,10 +874,10 @@ function Delivery({
           <hr />
           {preview && (
             <>
-              <span className="relevance high">High relevance</span>
+              <span className={`relevance ${preview.relevance}`}>{preview.relevance === "high" ? "High" : "Medium"} relevance</span>
               <h2>{preview.headline}</h2>
               <p>{preview.why_it_matters}</p>
-              <p className="muted">{preview.source_name} · 25.09.2026</p>
+              <p className="muted">{preview.source_name} · {preview.published_at}</p>
             </>
           )}
           {!preview && <p>No matching update to preview.</p>}

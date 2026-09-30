@@ -55,6 +55,7 @@ export type Update = {
   relevance: "high" | "medium";
   url?: string;
   published_at: string;
+  date_kind?: "published" | "discovered";
   read: boolean;
   saved: boolean;
   hidden: boolean;
@@ -81,25 +82,25 @@ export type Draft = {
   profile: MonitoringProfile;
 };
 export type Account = {
+  pending_email?: string;
   name: string;
   email: string;
   firm: string;
-  password_hash?: string;
-  password_salt?: string;
+  has_password?: boolean;
   quiet_start: string;
   quiet_end: string;
   defaults: Delivery;
 };
-export type AIxState = {
+export type AppState = {
+  account_id?: string;
   version: 1;
   draft: Draft | null;
   profiles: MonitoringProfile[];
   updates: Update[];
   account: Account;
 };
-export type AIxConfig = {
-  publicDisclosure: boolean;
-  operatorControls: boolean;
+export type RuntimeConfig = {
+  summaryNotice: boolean;
   processingModel: string;
   deployment: string;
   hostingLocation: string;

@@ -1,6 +1,6 @@
 import type { Update } from "../domain/monitoring";
 export function summaryText(u: Update, disclosure: boolean) {
-  return `${u.headline}\n${u.source_name} | ${u.published_at}\n\n${u.summary}\n\nWhy it matters for ${u.client_name}\n${u.why_it_matters}${disclosure ? "\n\nAIx sample scenario" : ""}`;
+  return `${u.headline}\n${u.source_name} | ${u.published_at}\n\n${u.summary}\n\nWhy it matters for ${u.client_name}\n${u.why_it_matters}\n\nSource: ${u.url || ""}${disclosure ? "\n\nAI-assisted summary — consult the original source." : ""}`;
 }
 export function downloadBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
@@ -46,6 +46,7 @@ export async function exportUpdatePDF(
   );
   text(`Matched topic: ${u.topic_title}`);
   text(`Legal basis: ${u.legal_basis}`, 10, 10);
+  text(`Source: ${u.url || ""}`, 9, 6);
   text("Summary", 13, 3);
   text(u.summary, 11, 10);
   text(`Why it matters for ${u.client_name}`, 13, 3);
@@ -54,6 +55,6 @@ export async function exportUpdatePDF(
     text("Private note", 13, 3);
     text(u.note);
   }
-  if (disclosure) text("AIx sample scenario", 9);
-  downloadBlob(doc.output("blob"), `helvetic-lens-aix-${u.published_at}.pdf`);
+  if (disclosure) text("AI-assisted summary — consult the original source.", 9);
+  downloadBlob(doc.output("blob"), `legal-feed-${u.published_at}.pdf`);
 }

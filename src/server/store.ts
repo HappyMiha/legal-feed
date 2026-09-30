@@ -1,0 +1,13 @@
+import type {AppState,Account,MonitoringProfile,Update} from '../domain/monitoring';
+import {database,HttpError} from './runtime';
+import type {ChatGPTUser} from '../../app/chatgpt-auth';
+export async function ensureAccount(user:ChatGPTUser){
+ const account:Account={name:user.fullName||user.email.split('@')[0],email:user.email,firm:'',quiet_start:'22:00',quiet_end:'07:00',defaults:{frequency:'both',channels:['email'],relevance_threshold:'high',digest_day:'monday',digest_time:'07:00'}};
+ await database().prepare('INSERT INTO accounts(id,data,created_at) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING').bind(user.userId,JSON.stringify(account),new Date().toISOString()).run();
+}
+export async function getAccount(owner:string){const row=await database().prepare('SELECT data,password_hash FROM accounts WHERE id=?').bind(owner).first<{data:string;password_hash:string|null}>();if(!row)throw new HttpError(404,'Account unavailable.');return {...JSON.parse(row.data),has_password:!!row.password_hash} as Account;}
+export async function getProfiles(owner:string){const rows=await database().prepare('SELECT data FROM profiles WHERE owner_id=? ORDER BY rowid').bind(owner).all<{data:string}>();return rows.results.map(r=>JSON.parse(r.data) as MonitoringProfile);}
+export async function getProfile(owner:string,id:string){const row=await database().prepare('SELECT data FROM profiles WHERE id=? AND owner_id=?').bind(id,owner).first<{data:string}>();if(!row)throw new HttpError(404,'Profile unavailable.');return JSON.parse(row.data) as MonitoringProfile;}
+export async function getUpdate(owner:string,id:string){const row=await database().prepare('SELECT data,source_text FROM updates WHERE id=? AND owner_id=?').bind(id,owner).first<{data:string;source_text:string}>();if(!row)throw new HttpError(404,'Update unavailable.');return {update:JSON.parse(row.data) as Update,sourceText:row.source_text};}
+export async function state(owner:string):Promise<AppState>{const [account,profiles,rows]=await Promise.all([getAccount(owner),getProfiles(owner),database().prepare('SELECT data FROM updates WHERE owner_id=? ORDER BY discovered_at DESC').bind(owner).all<{data:string}>()]);return {version:1,account_id:owner,draft:null,account,profiles,updates:rows.results.map(r=>JSON.parse(r.data))};}
+export async function health(owner:string){const r=await database().prepare('SELECT c.profile_id,c.source_id,c.checked_at,c.status,c.detail FROM source_checks c JOIN profiles p ON c.profile_id=p.id WHERE p.owner_id=?').bind(owner).all();const out=await database().prepare('SELECT status,count(*) AS count FROM outbox WHERE owner_id=? GROUP BY status').bind(owner).all();return {sources:r.results,deliveries:out.results};}

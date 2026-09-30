@@ -1,0 +1,29 @@
+name: Validate Legal Feed
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run db:local
+      - name: Local authenticated API integration tests
+        run: |
+          npm run dev > /tmp/legal-feed-dev.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS -H 'Cookie: __sites_local_auth=1' http://localhost:5173/api/state >/dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:api
+      - run: npm run build

@@ -1,136 +1,39 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
-import { AIxMonitoringBackend } from "../src/aix/aix-monitoring-backend";
-import {
-  createDraft,
-  emptyState,
-  validSignalUrl,
-  type StateStore,
-} from "../src/platform/storage";
-import type { AIxState } from "../src/domain/monitoring";
-function setup() {
-  let data = emptyState();
-  const store: StateStore = {
-    read: () => data,
-    write: (s: AIxState) => {
-      data = structuredClone(s);
-    },
-  };
-  return { store, backend: new AIxMonitoringBackend(store, 0) };
-}
-async function profile(backend: AIxMonitoringBackend) {
-  const p = createDraft().profile;
-  p.name = "Fintara AG: ESOP";
-  p.topics = await backend.suggestTopics("ESOP");
-  p.sources = await backend.suggestSources(p.topics);
-  return p;
-}
-test("case-insensitive scenario triggers and restrained unknown query", async () => {
-  const { backend } = setup();
-  for (const q of [
-    "ESOP",
-    "vSoP",
-    "employee participation",
-    "employee options",
-    "stock options",
-    "phantom shares",
-    "equity plan",
-    "Mitarbeiterbeteiligung",
-  ])
-    assert.equal((await backend.suggestTopics(q)).length, 6);
-  assert.deepEqual(await backend.suggestTopics("unrelated matters"), []);
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {safeUrl,hash,passwordHash} from '../src/server/security';
+import {parseFeed} from '../src/server/feed';
+import {isQuiet,zurichTime,eligible} from '../src/server/delivery-policy';
+import {sources,cantonSources,canonicalSource} from '../src/server/catalog';
+import {profileSchema} from '../src/server/validation';
+import type {Account,MonitoringProfile,Update} from '../src/domain/monitoring';
+test('URL validation excludes private targets and credentials',()=>{
+ for(const url of ['http://example.com','https://127.0.0.1/','https://2130706433/','https://[::1]/','https://user:password@example.com/','https://metadata.internal/','https://example.com:8080/'])assert.throws(()=>safeUrl(url));
+ assert.equal(safeUrl('https://www.admin.ch/news#fragment').href,'https://www.admin.ch/news');
 });
-test("activation validates, creates exactly four isolated historical records and rejects duplicate IDs", async () => {
-  const { backend } = setup();
-  const p = await profile(backend);
-  await assert.rejects(() => backend.createProfile({ ...p, name: " " }));
-  await assert.rejects(() => backend.createProfile({ ...p, topics: [] }));
-  await assert.rejects(() => backend.createProfile({ ...p, sources: [] }));
-  await backend.createProfile(p);
-  const records = await backend.getUpdates(p.id);
-  assert.equal(records.length, 4);
-  assert.equal(records.filter((u) => u.relevance === "high").length, 2);
-  await assert.rejects(() => backend.createProfile(p));
-  records[0].note = "mutation";
-  assert.equal((await backend.getUpdate(records[0].id)).note, undefined);
+test('RSS and Atom preserve canonical provenance and publication date',()=>{
+ const rss='<rss><channel><item><title>Actual &amp; attributed</title><link>https://example.com/record</link><pubDate>Wed, 30 Sep 2026 09:00:00 GMT</pubDate><description><![CDATA[<p>Source excerpt.</p>]]></description></item></channel></rss>';
+ const [record]=parseFeed(rss,'https://example.com/feed');assert.equal(record.title,'Actual & attributed');assert.equal(record.text,'Source excerpt.');assert.equal(record.date,'2026-09-30');assert.equal(record.dateKind,'published');
+ const [atom]=parseFeed('<feed><entry><title>Atom</title><link href="https://example.com/atom"/><summary>Text</summary></entry></feed>','https://example.com/feed');assert.equal(atom.dateKind,'discovered');assert.equal(atom.url,'https://example.com/atom');
+ assert.deepEqual(parseFeed('<rss><item><title>Unsafe</title><link>https://127.0.0.1/</link></item></rss>','https://example.com'),[]);
 });
-test("save, notes, read and feedback persist; history survives subscription changes and pause", async () => {
-  const { backend, store } = setup();
-  const p = await backend.createProfile(await profile(backend));
-  const u = (await backend.getUpdates(p.id))[0];
-  await backend.saveUpdate(u.id, true);
-  await backend.addNote(u.id, "Discuss with founders");
-  await backend.markRead(u.id);
-  await backend.submitFeedback(u.id, "not_relevant", "Reviewed");
-  await backend.updateProfile({
-    ...p,
-    status: "paused",
-    topics: p.topics.slice(1),
-    sources: p.sources.map((s) => ({ ...s, active: s.id === "seca" })),
-  });
-  const reopened = new AIxMonitoringBackend(store, 0);
-  const result = await reopened.getUpdate(u.id);
-  assert.equal(result.saved, true);
-  assert.equal(result.read, true);
-  assert.equal(result.note, "Discuss with founders");
-  assert.equal(result.hidden, true);
-  assert.equal(result.feedback_reason, "Reviewed");
-  assert.equal(result.topic_title, "Taxation of employee participations");
-  assert.equal((await reopened.getUpdates(p.id)).length, 4);
-  await reopened.submitFeedback(u.id, "relevant");
-  assert.equal((await reopened.getUpdate(u.id)).hidden, false);
-  await reopened.addNote(u.id, "");
-  assert.equal((await reopened.getUpdate(u.id)).note, "");
+test('Swiss quiet hours handle overnight intervals and daylight-saving transitions',()=>{
+ const account={quiet_start:'22:00',quiet_end:'07:00'} as Account;
+ assert.equal(zurichTime(new Date('2026-03-29T01:30:00Z')).time,'03:30');
+ assert.equal(zurichTime(new Date('2026-10-25T01:30:00Z')).time,'02:30');
+ assert.equal(isQuiet(account,new Date('2026-09-30T21:00:00Z')),true);
+ assert.equal(isQuiet(account,new Date('2026-09-30T10:00:00Z')),false);
+ assert.equal(isQuiet({...account,quiet_start:'07:00'} as Account),false);
 });
-test("duplicate has independent configuration and no copied private history; delete scoped to profile", async () => {
-  const { backend } = setup();
-  const p = await backend.createProfile(await profile(backend));
-  const copy = await backend.duplicateProfile(p.id);
-  assert.notEqual(copy.id, p.id);
-  assert.equal((await backend.getUpdates(copy.id)).length, 0);
-  copy.topics[0].title = "Changed";
-  await backend.updateProfile(copy);
-  assert.equal(
-    (await backend.getProfiles())[0].topics[0].title,
-    p.topics[0].title,
-  );
-  await assert.rejects(() => backend.deleteProfile(p.id, "wrong"));
-  await backend.deleteProfile(p.id, p.name);
-  assert.equal((await backend.getProfiles()).length, 1);
-  assert.equal((await backend.getUpdates(p.id)).length, 0);
+test('Delivery threshold and negative feedback govern actual eligible items',()=>{
+ const profile={delivery:{relevance_threshold:'high'}} as MonitoringProfile;
+ const items=[{id:'1',relevance:'high',hidden:false},{id:'2',relevance:'medium',hidden:false},{id:'3',relevance:'high',hidden:true}] as Update[];
+ assert.deepEqual(eligible(profile,items).map(u=>u.id),['1']);
 });
-test("unknown custom profiles do not receive unrelated ESOP content; URL validation rejects unsafe schemes", async () => {
-  const { backend } = setup();
-  const p = createDraft().profile;
-  p.name = "Custom";
-  p.topics = [
-    {
-      id: "custom",
-      title: "Own topic",
-      description: "",
-      origin: "user",
-      selected: true,
-    },
-  ];
-  p.sources = await backend.suggestSources(p.topics);
-  await backend.createProfile(p);
-  assert.equal((await backend.getUpdates(p.id)).length, 0);
-  for (const url of [
-    "javascript:alert(1)",
-    "not a URL",
-    "https://",
-    "https://user:password@example.com",
-  ])
-    assert.equal(validSignalUrl(url), false);
-  assert.equal(validSignalUrl("https://ledgy.com/newsletter"), true);
+test('Source catalogue canonicalization prevents user URL substitution',()=>{
+ const fedlex=sources.find(s=>s.id==='fedlex')!;assert.equal(canonicalSource({...fedlex,url:'https://evil.example'}).url,fedlex.url);
+ assert.equal(cantonSources('Zurich').length,5);assert.throws(()=>cantonSources('Unknown'));assert.throws(()=>profileSchema.parse({}));
 });
-test("profile context is captured in scenario impact without mutating other clients", async () => {
-  const { backend } = setup();
-  const p = await profile(backend);
-  p.name = "Another AG: ESOP";
-  const result = await backend.createProfile(p);
-  const u = (await backend.getUpdates(result.id))[0];
-  assert.equal(u.client_name, "Another AG");
-  assert.match(u.why_it_matters, /Another's/);
-  assert.equal((await backend.getDeliveryPreview())?.client_name, "Fintara AG");
+test('Passwords are salted and opaque identifiers deterministic',async()=>{
+ assert.notEqual(await passwordHash('same password','salt1'),await passwordHash('same password','salt2'));
+ assert.equal(await hash('same canonical URL'),await hash('same canonical URL'));
 });

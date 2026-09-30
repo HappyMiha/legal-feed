@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AIxState, Delivery, Draft } from "../domain/monitoring";
+import type { AppState, Delivery, Draft } from "../domain/monitoring";
 const deliverySchema = z.object({
   frequency: z.enum(["instant", "weekly", "both"]),
   channels: z.array(z.enum(["email", "teams", "slack"])),
@@ -64,7 +64,7 @@ const updateSchema = z.object({
   read: z.boolean(),
   saved: z.boolean(),
   hidden: z.boolean(),
-  client_name: z.string().default("Fintara AG"),
+  client_name: z.string(),
   source_name: z.string(),
   source_section: sourceSchema.shape.section,
   topic_title: z.string(),
@@ -91,14 +91,11 @@ const stateSchema = z.object({
     name: z.string(),
     email: z.string(),
     firm: z.string(),
-    password_hash: z.string().optional(),
-    password_salt: z.string().optional(),
     quiet_start: z.string(),
     quiet_end: z.string(),
     defaults: deliverySchema,
   }),
 });
-export const STORAGE_KEY = "helvetic-lens-aix:v1";
 export const defaultDelivery = (): Delivery => ({
   frequency: "both",
   channels: ["email"],
@@ -106,13 +103,13 @@ export const defaultDelivery = (): Delivery => ({
   digest_day: "monday",
   digest_time: "07:00",
 });
-export const emptyState = (): AIxState => ({
+export const emptyState = (): AppState => ({
   version: 1,
   draft: null,
   profiles: [],
   updates: [],
   account: {
-    name: "Anna",
+    name: "",
     email: "",
     firm: "",
     quiet_start: "22:00",
@@ -138,50 +135,38 @@ export function createDraft(delivery = defaultDelivery()): Draft {
     },
   };
 }
-export interface StateStore {
-  read(): AIxState;
-  write(state: AIxState): void;
+export class RemoteStateStore {
+ private state: AppState | null = null;
+ private listeners = new Set<() => void>();
+ private draftKey = "legal-feed:draft:v1";
+ private loaded = false;
+ private request = 0;
+ warning = "";
+ read(): AppState { return this.state ?? emptyState(); }
+ write(state: AppState) {
+  // Only an unfinished wizard draft is device-local. Server state is authoritative.
+  if(!this.loaded) throw Error("Account is still loading.");
+  localStorage.setItem(this.draftKey, JSON.stringify(state.draft));
+  this.state={...this.read(),draft:state.draft};this.emit();
+ }
+ replace(state:AppState){this.state=state;this.loaded=true;this.emit();}
+ private emit(){this.listeners.forEach(l=>l());}
+ subscribe=(listener:()=>void)=>{this.listeners.add(listener);return()=>this.listeners.delete(listener);};
+ snapshot=()=>this.state;
+ refresh=async()=>{
+  const request=++this.request;
+  const {api}=await import('../production/api');
+  const remote=await api<AppState>('state');
+  if(request!==this.request)return;
+  const switched=this.state?.account_id!==remote.account_id;
+  if(switched){this.loaded=false;this.draftKey=`legal-feed:draft:v1:${remote.account_id}`;}
+  let draft=switched?null:this.state?.draft??null;
+  if(!this.loaded){try{const raw=localStorage.getItem(this.draftKey);if(raw)draft=stateSchema.shape.draft.parse(JSON.parse(raw));}catch{localStorage.removeItem(this.draftKey);}}
+  this.state={...remote,draft};this.loaded=true;this.emit();
+ };
+ reset=()=>{localStorage.removeItem(this.draftKey);this.state=null;this.loaded=false;this.emit();};
 }
-export class LocalStateStore implements StateStore {
-  private state: AIxState | null = null;
-  private listeners = new Set<() => void>();
-  warning = "";
-  read(): AIxState {
-    if (this.state) return this.state;
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        this.state = stateSchema.parse(JSON.parse(raw));
-      }
-    } catch {
-      this.warning =
-        "Stored data could not be restored. You can create a new profile or use recovery.";
-    }
-    return (this.state ??= emptyState());
-  }
-  write(state: AIxState) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    this.state = state;
-    this.listeners.forEach((l) => l());
-  }
-  subscribe = (listener: () => void) => {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  };
-  snapshot = () => this.state;
-  refresh = () => {
-    this.state = null;
-    this.read();
-    this.listeners.forEach((l) => l());
-  };
-  reset = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    this.state = emptyState();
-    this.warning = "";
-    this.listeners.forEach((l) => l());
-  };
-}
-export const stateStore = new LocalStateStore();
+export const stateStore = new RemoteStateStore();
 export function validSignalUrl(value: string) {
   try {
     const u = new URL(value);

@@ -1,0 +1,4 @@
+import type {Account,MonitoringProfile,Update} from '../domain/monitoring';
+export function zurichTime(date=new Date()) {const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Zurich',weekday:'long',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(date);const v=(t:string)=>p.find(x=>x.type===t)!.value;return {day:v('weekday').toLowerCase(),time:`${v('hour')}:${v('minute')}`,date:`${v('year')}-${v('month')}-${v('day')}`};}
+export function isQuiet(account:Account,date=new Date()){const t=zurichTime(date).time,a=account.quiet_start,b=account.quiet_end;return a===b?false:a<b?t>=a&&t<b:t>=a||t<b;}
+export function eligible(profile:MonitoringProfile,updates:Update[]){return updates.filter(u=>!u.hidden&&(profile.delivery.relevance_threshold==='all'||u.relevance==='high'));}

@@ -1,5 +1,27 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "entries": []
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1790784854404,
+      "tag": "0000_nosy_lady_bullseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790785093070,
+      "tag": "0001_amusing_maelstrom",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790785259006,
+      "tag": "0002_overjoyed_sir_ram",
+      "breakpoints": true
+    }
+  ]
 }

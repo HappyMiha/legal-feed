@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Helvetic Lens",
+  title: "Legal Feed",
   description: "Legal monitoring profiles and updates.",
   other: {
     "codex-preview": "development",

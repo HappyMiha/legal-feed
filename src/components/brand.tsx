@@ -31,7 +31,7 @@ export function BrandLockup({
       data-inverse={inverse || undefined}
     >
       <BrandMark className="brand-lockup-mark" />
-      <span className="brand-lockup-name">Helvetic Lens</span>
+      <span className="brand-lockup-name">Legal Feed</span>
     </span>
   );
 }

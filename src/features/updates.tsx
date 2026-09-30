@@ -25,13 +25,13 @@ import {
   sections,
 } from "../components/controls";
 import type {
-  AIxConfig,
+  RuntimeConfig,
   MonitoringProfile,
   SourceRecord,
   Update,
 } from "../domain/monitoring";
 import type { Actions } from "../app";
-import { monitoringBackend } from "../aix/aix-monitoring-backend";
+import { monitoringBackend } from "../production/backend";
 import { exportUpdatePDF, summaryText } from "../platform/export";
 export function UpdateRows({
   updates,
@@ -54,7 +54,7 @@ export function UpdateRows({
         >
           <div className="update-meta">
             <span>{u.source_name}</span>
-            <span>{formatDate(u.published_at)}</span>
+            <span>{u.date_kind === "discovered" ? "Discovered " : ""}{formatDate(u.published_at)}</span>
             <span className={`relevance ${u.relevance}`}>
               {u.relevance === "high" ? "High" : "Medium"}
             </span>
@@ -105,7 +105,7 @@ export function Feed({
       (relevance === "all" || u.relevance === relevance) &&
       (!unread || !u.read) &&
       (!start || u.published_at >= start) &&
-      (!end || u.published_at <= end) &&
+      (!end || u.published_at.slice(0,10) <= end) &&
       `${u.headline} ${u.summary} ${u.why_it_matters} ${u.source_name} ${u.topic_title}`
         .toLowerCase()
         .includes(query.toLowerCase()),
@@ -240,7 +240,7 @@ export function UpdateDetail({
   id: string;
   profiles: MonitoringProfile[];
   updates: Update[];
-  config: AIxConfig;
+  config: RuntimeConfig;
   actions: Actions;
 }) {
   const u = updates.find((u) => u.id === id);
@@ -262,7 +262,7 @@ export function UpdateDetail({
         <Button onClick={() => actions.go("/feed")}>Go to feed</Button>
       </Empty>
     );
-  const text = summaryText(u, config.publicDisclosure);
+  const text = summaryText(u, config.summaryNotice);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
@@ -284,7 +284,7 @@ export function UpdateDetail({
       <div className="detail-heading">
         <div className="update-meta">
           <span>{u.source_name}</span>
-          <span>{formatDate(u.published_at)}</span>
+          <span>{u.date_kind === "discovered" ? "Discovered " : ""}{formatDate(u.published_at)}</span>
           <span className={`relevance ${u.relevance}`}>
             {u.relevance === "high" ? "High" : "Medium"} relevance
           </span>
@@ -304,7 +304,7 @@ export function UpdateDetail({
       <div className="detail-layout">
         <div>
           <section className="impact-section">
-            <p className="eyebrow">{profile?.name || "Fintara AG: ESOP"}</p>
+            <p className="eyebrow">{profile?.name || u.client_name}</p>
             <h2>Why it matters for {u.client_name}</h2>
             <p>{u.why_it_matters}</p>
           </section>
@@ -397,8 +397,8 @@ export function UpdateDetail({
               Not relevant
             </Button>
           </div>
-          {config.publicDisclosure && (
-            <p className="scenario-note">AIx sample scenario</p>
+          {config.summaryNotice && (
+            <p className="scenario-note">AI-assisted summary — consult the original source.</p>
           )}
         </div>
         <aside className="detail-actions">
@@ -493,7 +493,7 @@ export function UpdateDetail({
           </Button>
           <Button
             onClick={() => {
-              void exportUpdatePDF(u, includeNote, config.publicDisclosure)
+              void exportUpdatePDF(u, includeNote, config.summaryNotice)
                 .then(() => {
                   setPdf(false);
                   toast.success("PDF exported");
@@ -514,7 +514,7 @@ export function SourceView({
   actions,
 }: {
   id: string;
-  config: AIxConfig;
+  config: RuntimeConfig;
   actions: Actions;
 }) {
   const [record, setRecord] = useState<SourceRecord | null>(null);
@@ -551,11 +551,12 @@ export function SourceView({
             <dt>Legal basis</dt>
             <dd>{record.update.legal_basis}</dd>
           </dl>
+          {record.update.url && <p><a href={record.update.url} target="_blank" rel="noopener noreferrer">Open original publication ↗</a></p>}
           <section>
-            <h2>Record text</h2>
+            <h2>Source text</h2>
             <p>{record.body}</p>
           </section>
-          {config.publicDisclosure && (
+          {config.summaryNotice && (
             <p className="scenario-note">{record.disclosure}</p>
           )}
         </>
@@ -578,7 +579,7 @@ export function Digest({
 }) {
   const p = profiles.find((p) => p.id === id);
   const items = updates
-    .filter((u) => u.profile_id === id)
+    .filter((u) => u.profile_id === id && !u.hidden && (p?.delivery.relevance_threshold === "all" || u.relevance === "high"))
     .sort((a, b) =>
       a.relevance === b.relevance
         ? b.published_at.localeCompare(a.published_at)
@@ -601,7 +602,7 @@ export function Digest({
       </Button>
       <p className="eyebrow">Email digest preview</p>
       <h1>
-        Helvetic Lens: {items.length} updates for {p.name.split(":")[0]}
+        Legal Feed: {items.length} updates for {p.name.split(":")[0]}
       </h1>
       <h2>{p.name}</h2>
       {!items.length && <p className="muted">No updates yet.</p>}

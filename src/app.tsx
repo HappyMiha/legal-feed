@@ -17,13 +17,13 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Empty } from "@/components/ui/empty";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {registerMonitoringTools} from "./production/webmcp";
 import { BrandLockup } from "./components/brand";
 import { Button } from "./components/controls";
-import type { AIxConfig, MonitoringProfile, Update } from "./domain/monitoring";
+import type { RuntimeConfig, MonitoringProfile, Update } from "./domain/monitoring";
 import { stateStore, createDraft } from "./platform/storage";
-import { monitoringBackend } from "./aix/aix-monitoring-backend";
-import { recoverAIx } from "./aix/aix-operator";
+import { monitoringBackend } from "./production/backend";
 import { Wizard } from "./features/wizard";
 import { Feed, UpdateDetail, SourceView, Digest } from "./features/updates";
 import { Profiles, SettingsPage } from "./features/profiles";
@@ -34,7 +34,7 @@ export type Actions = {
   edit: (profile: MonitoringProfile, step: string) => void;
 };
 const serverSnapshot = () => null;
-export default function AIxApp({ config }: { config: AIxConfig }) {
+export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
   const state = useSyncExternalStore(
     stateStore.subscribe,
     stateStore.snapshot,
@@ -47,6 +47,7 @@ export default function AIxApp({ config }: { config: AIxConfig }) {
     updates: Update[];
   }>({ profiles: [], updates: [] });
   const [ready, setReady] = useState(false);
+  const [loadError,setLoadError]=useState("");
   const generation = useRef(0);
   const go = useCallback((target: string) => {
     history.pushState({}, "", target);
@@ -57,60 +58,19 @@ export default function AIxApp({ config }: { config: AIxConfig }) {
   const run = useCallback(async (work: () => Promise<void>) => {
     try {
       await work();
-    } catch {
-      toast.error("Could not save this change. Please try again.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save this change. Please try again.");
     }
   }, []);
   useEffect(() => {
-    stateStore.refresh();
-    const sync = () => {
-      setPath(location.pathname);
-      setQuery(location.search);
-    };
-    const params = new URLSearchParams(location.search);
-    if (
-      config.operatorControls &&
-      (params.has("reset") || params.get("state") === "empty")
-    ) {
-      stateStore.reset();
-      history.replaceState({}, "", "/");
-    } else if (
-      config.operatorControls &&
-      ["feed", "detail"].includes(params.get("state") || "")
-    ) {
-      history.replaceState(
-        {},
-        "",
-        recoverAIx(params.get("state") as "feed" | "detail"),
-      );
-    }
+    void stateStore.refresh().catch((error)=>{setLoadError(error.message);toast.error(error.message);});
+    const sync=()=>{setPath(location.pathname);setQuery(location.search);};
     sync();
-    const operator = (event: KeyboardEvent) => {
-      if (
-        config.operatorControls &&
-        event.altKey &&
-        event.shiftKey &&
-        ["Digit0", "Digit5", "Digit6"].includes(event.code)
-      ) {
-        event.preventDefault();
-        if (event.code === "Digit0") {
-          stateStore.reset();
-          go("/");
-        } else go(recoverAIx(event.code === "Digit5" ? "feed" : "detail"));
-      }
-    };
-    window.addEventListener("popstate", sync);
-    window.addEventListener("storage", stateStore.refresh);
-    window.addEventListener("keydown", operator);
-    if (stateStore.warning) toast.error(stateStore.warning);
-    if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator)
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    return () => {
-      window.removeEventListener("popstate", sync);
-      window.removeEventListener("storage", stateStore.refresh);
-      window.removeEventListener("keydown", operator);
-    };
-  }, [config.operatorControls, go]);
+    const timer=setInterval(()=>{if(document.visibilityState==='visible')void stateStore.refresh().catch(()=>{});},30000);
+    window.addEventListener("popstate",sync);
+    if('serviceWorker' in navigator)void navigator.serviceWorker.getRegistrations().then(registrations=>Promise.all(registrations.map(r=>r.unregister())));
+    return()=>{clearInterval(timer);window.removeEventListener("popstate",sync);};
+  }, [go]);
   useEffect(() => {
     if (!state) return;
     let alive = true;
@@ -163,6 +123,7 @@ export default function AIxApp({ config }: { config: AIxConfig }) {
     });
   };
   const actions = { go, run, begin, edit };
+  useEffect(()=>registerMonitoringTools(go),[go]);
   const { profiles, updates } = model;
   const isWizard = path.startsWith("/monitoring/");
   const activeId = new URLSearchParams(query).get("profile") || profiles[0]?.id;
@@ -171,7 +132,7 @@ export default function AIxApp({ config }: { config: AIxConfig }) {
   if (!state || !ready)
     content = (
       <div className="loading" role="status">
-        Loading monitoring profiles…
+        {loadError ? <><p role="alert">{loadError}</p><Button onClick={()=>location.reload()}>Retry</Button></> : "Loading monitoring profiles…"}
       </div>
     );
   else if (isWizard)
@@ -306,13 +267,13 @@ export default function AIxApp({ config }: { config: AIxConfig }) {
           </button>
           <div className="account-lockup">
             <Avatar className="avatar" aria-hidden="true">
-              <AvatarImage src="/images/anna-avatar.png" alt="" />
+
               <AvatarFallback>
-                {(state?.account.name || "Anna").slice(0, 1)}
+                {(state?.account.name || "Account").slice(0, 1)}
               </AvatarFallback>
             </Avatar>
             <div>
-              {state?.account.name || "Anna"}
+              {state?.account.name || "Account"}
               <small>{state?.account.firm || "Personal account"}</small>
             </div>
           </div>
@@ -330,7 +291,7 @@ export default function AIxApp({ config }: { config: AIxConfig }) {
                   ? "Settings"
                   : "Monitoring"}
           </span>
-          <span className="topbar-right">Helvetic Lens</span>
+          <span className="topbar-right">Legal Feed</span>
         </header>
         <main
           id="main-content"

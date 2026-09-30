@@ -1,101 +1,69 @@
-# Helvetic Lens AIx
+# Legal Feed
 
-Focused ESOP monitoring application for the AI+X Summit on 1 October 2026. UI language is English. Product branding is Helvetic Lens. Target hostname: https://ai.helveticlens.ch.
+Swiss legal monitoring, preserving the Helvetic Lens AIx interface and four-step profile journey. Application code is Apache-2.0.
 
-## Setup and verification
+- Production: https://legal-feed.m-shavritskiy.chatgpt.site
+- Repository: https://github.com/HappyMiha/legal-feed
+- Original interface: https://github.com/HappyMiha/helvetic-lens-aix
 
-Requires Node.js 22.13+ and npm. From a clean checkout:
+## Real services
+
+The application uses authenticated, account-scoped Cloudflare D1 storage; Swisscom Apertus 1.5 70B for topic suggestions and source-grounded analysis; official public feeds/APIs plus Search1API for discovery; and an Infomaniak SMTP transport for notification delivery. No fictional legal updates, preset scenario topics, recovery fixtures, artificial processing delay or local account backend are shipped.
+
+Profiles, source selections, pause/resume, notes, read/saved state, feedback, settings, passwords for sensitive-action confirmation, and deletion are server-backed. Only unfinished drafts are kept locally, under a key scoped to the authenticated account. ChatGPT sign-in supplies identity; the additional account password confirms deletion rather than replacing that sign-in.
+
+## Run locally
+
+Requires Node.js 22.13+, npm, and Python 3 for integration tests/background email transport.
 
 ```sh
 npm ci
-npm exec playwright install chromium
+cp .env.example .dev.vars
+# Fill server-only service credentials in .dev.vars.
+npm run db:local
 npm run dev
 ```
 
-Open the URL printed by the development server. The complete core flow uses local data and browser persistence; it needs no model, monitoring API, authentication service or live source connector after loading.
+Apply the generated SQL migrations to the local D1 binding using Wrangler before using the app. The local Sites sign-in endpoint creates a development-only identity. Production trusts identity forwarded by the Sites dispatcher; never expose the Worker directly without a trusted authentication gateway.
 
 ```sh
 npm run typecheck
-npm run lint
 npm test
+npm run test:api  # against the local dev server and migrated local D1
 npm run build
-npm run start -- --port 4173
-npm run test:e2e
-npm run aix:verify
 ```
 
-`aix:verify` runs typecheck, lint, unit tests, production build and browser tests in that order. E2E tests own a production server on port 4173; do not start a second server there. `AIX_TEST_URL` can target another running environment. `AIX_CHROMIUM_PATH` optionally selects an installed Chromium. Production browser tests include three separate clean rehearsals, offline refresh/PDF export, state persistence, profile management, invalid inputs, and 1366×768 / 390×844 layouts. No release to the target hostname if verification fails.
+The production build emits a Cloudflare Worker and static client assets. Migrations in `drizzle/` are applied by Sites on publication. `app/globals.css`, `app/design-tokens.css`, and the supplied UI primitives retain the demo's visual design.
 
-## Architecture
+## Background monitoring and email
 
-- `src/domain/monitoring.ts`: MonitoringBackend, MonitoringProfile, Topic, Source, Delivery, Update.
-- `src/aix`: asynchronous AIxMonitoringBackend, deterministic topics/sources/updates, operator recovery.
-- `src/features`: onboarding wizard, feed/detail/source record, profiles/digest/settings.
-- `src/platform`: versioned browser storage, clipboard text and PDF/data export.
-- `src/app.tsx`: three-area shell and local history routing.
+`.github/workflows/monitor.yml` runs every 15 minutes and supports manual dispatch. It invokes secret-protected job endpoints, discovers and analyzes source documents, then delivers queued emails using STARTTLS SMTP. GitHub scheduling can be delayed; this is not a contractual delivery-time guarantee. Instant alerts mean delivery after discovery, subject to quiet hours. Sources are normally checked hourly. Weekly digests use Europe/Zurich, including daylight-saving transitions, and the selected day/time (default Monday 07:00).
 
-UI screens obtain update records through MonitoringBackend. Fixture modules are not imported by screens. Replacing the backend with a future HelveticLensMonitoringBackend does not require changing feature screens. State namespace: `helvetic-lens-aix:v1`.
+Repository configuration:
 
-Draft input, topic selection/edits/deletions, source toggles, signals, delivery, profile names, notes, save/read/feedback state, quiet hours, and paused profiles persist in this browser. Failed storage writes do not announce success. The source repositories are unchanged; see SOURCE_BASELINE.md.
+- Variable: `LEGAL_FEED_URL`
+- Secrets: `CRON_SECRET`, `SITES_SERVICE_TOKEN`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM`
 
-## AIx scenario semantics
+Site runtime configuration is documented in `.env.example`. SMTP credentials stay in the scheduled transport, not in browser code. The service token permits job requests through the private Sites gateway; `CRON_SECRET` independently authenticates the application's job endpoints.
 
-ESOP, VSOP, employee participation, employee options, stock options, phantom shares, equity plan and Mitarbeiterbeteiligung match case-insensitively. Topic processing lasts 1700 ms. Unknown queries retain their input and allow custom topics without inventing unrelated legal content.
+Updates and instant notification records commit together. URL uniqueness, processed-document fingerprints, profile leases, outbox leases, and stable email Message-IDs prevent common duplicate/retry failures. SMTP provides at-least-once delivery: an accepted email followed by a lost acknowledgement can still be duplicated. Failed deliveries retry with bounded attempts. Pause, relevance, negative feedback, current frequency, and quiet hours are checked before delivery.
 
-Activating an ESOP profile creates the specified four recurring-use historical records immediately. Their source, legal basis and matched topic are immutable snapshots. Editing or deleting a subscription topic/source does not rewrite historical provenance. The fixture history remains the fixed four-item story even when the presenter changes selections. New custom-only profiles have no unrelated ESOP records. Duplicating a profile copies its configuration but starts with empty history, notes and feedback. Pause/resume stores profile state; there is no live monitoring scheduler.
+Changing notification email queues a verification link; the existing verified address stays active until the link is confirmed. Account deletion cascades to profiles, updates, source checks, pending deliveries and verification requests. Export includes retained account data and source-check status without credential material.
 
-All four scenario records appear in the feed and digest, including Medium relevance. The delivery threshold remains in the profile and applies to the instant-alert preview. This deliberately preserves the supplied journey; production monitoring semantics must be aligned when the real engine is connected.
+## Source coverage and limits
 
-Signals validate HTTP(S) URL syntax and remain `requested`; no LinkedIn or newsletter connection is claimed. No real messages or email digests are sent. Local account settings do not provide remote identity/authentication. The locally hashed password confirms local data deletion only; it is not encryption or an access-control boundary.
+Verified direct connectors: Fedlex RSS, ESTV and BSV public news APIs, Federal Administrative Court media releases, Zurich authority news, Swiss Startup Association RSS. Other federal/cantonal/association selections use searches scoped to official publisher domains, with retrieved text or explicitly labelled public search excerpts. Generic RSS/Atom and public newsletter archive URLs are supported. LinkedIn monitoring covers public indexed content only, not private posts or an authenticated LinkedIn subscription.
 
-The four legal updates are fictional scenario records, not verified decisions or legal advice. Original source opens a matching internal source-record view; it never points to an unrelated court decision. Public disclosure is enabled by default and appears discreetly in detail/source views and copied/downloaded content. Do not add invented case identifiers.
+Source errors are visible under profile monitoring status. A source being selected is not a promise of comprehensive coverage. Some publishers block automated retrieval; image-only/PDF-only or login-only content is not fully ingested. Unknown publication dates are labelled **Discovered**, not presented as a new legal change. Legal-basis text is shown only when it appears in the captured source. Generated summaries require professional review; original publisher links and source excerpts are retained.
 
-## Configuration
+Teams/Slack channels and German/French interface controls remain disabled as in the supplied demo. The application does not claim those integrations exist.
 
-See `.env.example`. Runtime deployment configuration belongs in Sites environment variables, not the hosting manifest:
+## Operations
 
-- `AIX_PUBLIC_DISCLOSURE=true`: small `AIx sample scenario` note. Required outside a controlled pitch.
-- `AIX_OPERATOR_CONTROLS=true`: local reset/recovery controls; never primary navigation.
-- `AIX_PROCESSING_MODEL`: truthful deployed model label; empty means no model connected.
-- `AIX_DEPLOYMENT_TYPE`, `AIX_HOSTING_LOCATION`: truthful runtime values; unknown stays not configured.
-- `AIX_MODE=true`: documented environment designation; backend selection is fixed to AIx in this slice.
+Use GitHub Actions run history for scheduler failures and the profile's Monitoring status for individual source failures. Runtime logs must never print credentials. Do not seed production with test data. `tests/api-integration.py` refuses non-local endpoints.
 
-No secrets belong in client variables. No Swiss hosting or Apertus claims are hard-coded.
+Before publication: run type checks, unit tests and local API integration tests, build the exact source, commit and push it, package the Worker with its migrations, and publish that saved revision through Sites. Keep published migrations immutable. Review source failures independently of application deployment health.
 
-## Reset and recovery
+## License and source rights
 
-```sh
-npm run aix:reset
-```
-
-The command prints browser-local actions (it cannot clear a different browser's storage):
-
-- `/?reset=1`, `/?state=empty`, or Alt+Shift+0: clear all AIx state and show the clean start.
-- `/?state=feed` or Alt+Shift+5: restore one canonical Fintara AG: ESOP profile with four updates.
-- `/?state=detail` or Alt+Shift+6: restore and open the court update.
-
-Recovery replaces only AIx state, never other applications' storage. Operators can restore the feed in under five seconds. Reset removes draft, account, profiles, updates, notes, feedback, and saved/read state.
-
-## Offline and production
-
-Build emits a versioned service worker and precaches all app assets, fonts, PDF chunks and the root shell. After one successful production load and service-worker installation, local navigation, refresh, the full Stage 0–6 flow, PDF and all browser-state actions work offline. A brand-new device still needs one network load. Failed offline-cache installation does not block online use.
-
-Sites infrastructure may have an owner-only access gate before the first load; application code has no authentication dependency. Keep access policy deliberate. A local production server avoids an external first-load gate during a presentation.
-
-## Deployment
-
-`.openai/hosting.json` belongs to this AIx Site only. Build/verify, commit and push the exact source, package `dist`, save that revision in Sites and deploy it. Never substitute another Helvetic Lens Site ID. Configure the requested hostname using its returned CNAME and verification records without changing other product hostnames. Source credentials and DNS credentials are never committed.
-
-The build generates `dist/server/index.js`, `dist/client`, and the Sites hosting manifest. `npm run start` serves the production Worker locally. For Sites packaging use the installed Sites build/package scripts. Runtime configuration updates require deployment of a saved version.
-
-## Presentation runbook
-
-1. Reset to clean Stage 0. Create monitoring profile.
-2. Enter ESOP; suggest topics; make a small edit, selection and deletion.
-3. Continue; disable economiesuisse; add a competing law firm's LinkedIn page and the Ledgy newsletter.
-4. Choose Both, Email, Only high relevance; show the live preview.
-5. Name the profile `Fintara AG: ESOP`; activate; go to feed.
-6. Open the 25.09.2026 court update; show provenance, legal basis, Summary and Why it matters.
-7. Copy summary. End here; use profile management/settings only for questions.
-
-P2 work (real authentication, monitoring engine, email sending, ingestion and other scenarios) is intentionally excluded.
+Apache-2.0 covers this application's original code, not third-party source publications or models. Publisher material retains its own rights. Source text is held as account-linked monitoring evidence and never committed to this repository. See LICENSE, NOTICE, SOURCE_BASELINE.md, and THIRD_PARTY_NOTICES.md.

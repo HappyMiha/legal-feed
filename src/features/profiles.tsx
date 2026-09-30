@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   Copy,
@@ -22,16 +22,17 @@ import {
   formatDate,
 } from "../components/controls";
 import type {
-  AIxConfig,
-  AIxState,
+  RuntimeConfig,
+  AppState,
   Account,
   MonitoringProfile,
   Update,
 } from "../domain/monitoring";
 import type { Actions } from "../app";
-import { monitoringBackend } from "../aix/aix-monitoring-backend";
+import { monitoringBackend } from "../production/backend";
 import { stateStore } from "../platform/storage";
 import { downloadBlob } from "../platform/export";
+import { api } from "../production/api";
 import { UpdateRows } from "./updates";
 export function Profiles({
   id,
@@ -189,6 +190,7 @@ export function Profiles({
           </section>
         ))}
       </div>
+      <MonitoringHealth profileId={p.id} />
       <section className="history">
         <h2>History</h2>
         {updates.some((u) => u.profile_id === id) ? (
@@ -238,36 +240,13 @@ export function Profiles({
     </div>
   );
 }
-async function passwordHash(password: string, salt: string) {
-  const bytes = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    bytes.encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"],
-  );
-  const hash = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      salt: bytes.encode(salt),
-      iterations: 150000,
-      hash: "SHA-256",
-    },
-    key,
-    256,
-  );
-  return Array.from(new Uint8Array(hash), (b) =>
-    b.toString(16).padStart(2, "0"),
-  ).join("");
-}
 export function SettingsPage({
   state,
   config,
   actions,
 }: {
-  state: AIxState;
-  config: AIxConfig;
+  state: AppState;
+  config: RuntimeConfig;
   actions: Actions;
 }) {
   const [account, setAccount] = useState<Account>(state.account);
@@ -278,69 +257,26 @@ export function SettingsPage({
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
-  const save = () => {
-    stateStore.write({
-      ...stateStore.read(),
-      account: {
-        ...account,
-        password_hash: stateStore.read().account.password_hash,
-        password_salt: stateStore.read().account.password_salt,
-      },
-    });
-    toast.success("Settings saved");
+  const save = async () => {
+    await api("account","PUT",account);
+    await stateStore.refresh();
+    toast.success(stateStore.read().account.pending_email ? "Settings saved. Check your new email for a verification link." : "Settings saved");
   };
-  const changePassword = async () => {
-    setWorking(true);
-    setError("");
-    try {
-      const existing = stateStore.read().account;
-      if (
-        existing.password_hash &&
-        (await passwordHash(currentPassword, existing.password_salt!)) !==
-          existing.password_hash
-      ) {
-        setError("The current password is incorrect.");
-        return;
-      }
-      if (password.length < 8) {
-        setError("Use at least 8 characters.");
-        return;
-      }
-      const salt = crypto.randomUUID();
-      stateStore.write({
-        ...stateStore.read(),
-        account: {
-          ...existing,
-          password_salt: salt,
-          password_hash: await passwordHash(password, salt),
-        },
-      });
-      setPasswordOpen(false);
-      setPassword("");
-      setCurrentPassword("");
-      toast.success("Local password saved");
-    } finally {
-      setWorking(false);
-    }
+  const changePassword=async()=>{
+    setWorking(true);setError("");
+    try{
+      await api("account/password","POST",{currentPassword,newPassword:password});
+      await stateStore.refresh();setPasswordOpen(false);setPassword("");setCurrentPassword("");toast.success("Password saved");
+    }catch(error){setError(error instanceof Error?error.message:"Could not save password.");}
+    finally{setWorking(false);}
   };
-  const deleteAccount = async () => {
-    setWorking(true);
-    try {
-      const a = stateStore.read().account;
-      if (
-        !a.password_hash ||
-        (await passwordHash(password, a.password_salt!)) !== a.password_hash
-      ) {
-        setError("The password is incorrect.");
-        return;
-      }
-      stateStore.reset();
-      setDeleteOpen(false);
-      actions.go("/");
-      toast.success("Account data cleared");
-    } finally {
-      setWorking(false);
-    }
+  const deleteAccount=async()=>{
+    setWorking(true);setError("");
+    try{
+      await api("account","DELETE",{password,confirmation});
+      stateStore.reset();location.assign('/signout-with-chatgpt?return_to=/');
+    }catch(error){setError(error instanceof Error?error.message:"Could not delete account.");}
+    finally{setWorking(false);}
   };
   return (
     <div className="settings-page">
@@ -376,6 +312,7 @@ export function SettingsPage({
                 }
               />
             </label>
+            {state.account.pending_email && <p className="muted">Verification pending for {state.account.pending_email}. Check your email within 15 minutes.</p>}
             <label className="field">
               Firm
               <Input
@@ -395,11 +332,11 @@ export function SettingsPage({
                   setPasswordOpen(true);
                 }}
               >
-                {state.account.password_hash
+                {state.account.has_password
                   ? "Change password"
                   : "Set password"}
               </Button>
-              <p className="muted">Local account data protection.</p>
+              <p className="muted">Sign-in with ChatGPT. Password confirmation protects account deletion.</p>
             </div>
           </div>
         </section>
@@ -473,7 +410,7 @@ export function SettingsPage({
           <dd>{config.hostingLocation}</dd>
         </dl>
         <p className="muted">
-          Profiles and private notes are stored in this browser.
+          Profiles and private notes are stored securely in your account.
         </p>
       </section>
       <section className="settings-section">
@@ -481,17 +418,10 @@ export function SettingsPage({
         <div className="actions">
           <Button
             variant="outline"
-            onClick={() => {
-              const data = structuredClone(stateStore.read());
-              delete data.account.password_hash;
-              delete data.account.password_salt;
-              downloadBlob(
-                new Blob([JSON.stringify(data, null, 2)], {
-                  type: "application/json",
-                }),
-                "helvetic-lens-aix-data.json",
-              );
-            }}
+            onClick={()=>void actions.run(async()=>{
+              const data={...await api<Record<string,unknown>>("account/export"),draft:stateStore.read().draft};
+              downloadBlob(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),"legal-feed-data.json");
+            })}
           >
             <Download />
             Export my data
@@ -511,8 +441,8 @@ export function SettingsPage({
         </div>
       </section>
       <Modal
-        title="Set local password"
-        description="This password confirms deletion of account data in this browser. It does not sign you in to an external service."
+        title="Set password"
+        description="Set an additional password to confirm sensitive account actions. Sign-in is managed by ChatGPT."
         open={passwordOpen}
         onClose={() => setPasswordOpen(false)}
       >
@@ -522,7 +452,7 @@ export function SettingsPage({
             void actions.run(changePassword);
           }}
         >
-          {state.account.password_hash && (
+          {state.account.has_password && (
             <label className="field">
               Current password
               <Input
@@ -564,11 +494,11 @@ export function SettingsPage({
       <Modal
         destructive
         title="Delete account"
-        description="This clears account details, profiles, updates, and notes saved in this browser. Type DELETE and enter your local password."
+        description="This permanently deletes your account details, profiles, updates, notes and pending deliveries. Type DELETE and enter your password."
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
       >
-        {state.account.password_hash ? (
+        {state.account.has_password ? (
           <>
             <label className="field">
               Password
@@ -605,7 +535,7 @@ export function SettingsPage({
           </>
         ) : (
           <>
-            <p>Set a local password before deleting account data.</p>
+            <p>Set a password before deleting account data.</p>
             <div className="actions">
               <Button variant="outline" onClick={() => setDeleteOpen(false)}>
                 Cancel
@@ -624,4 +554,11 @@ export function SettingsPage({
       </Modal>
     </div>
   );
+}
+
+function MonitoringHealth({profileId}:{profileId:string}){
+ const [status,setStatus]=useState<{sources:{profile_id:string;source_id:string;checked_at:string;status:string;detail:string}[]} | null>(null);
+ useEffect(()=>{let alive=true;const load=()=>{void api<typeof status>("health").then(s=>{if(alive)setStatus(s);}).catch(()=>{});};load();const timer=setInterval(load,30000);return()=>{alive=false;clearInterval(timer);};},[profileId]);
+ const checks=status?.sources.filter(s=>s.profile_id===profileId)||[];
+ return <section className="panel"><h2>Monitoring status</h2>{checks.length?<><p className="muted">Last check {new Date(Math.max(...checks.map(c=>Date.parse(c.checked_at)))).toLocaleString()}</p>{checks.filter(s=>s.status==='error').map(s=><p className="error" key={s.source_id}>{s.source_id}: {s.detail}</p>)}{checks.every(s=>s.status==='ok')&&<p className="muted">Connected sources are being checked for new publications.</p>}</>:<p className="muted">Your first source checks are queued. Updates appear when a relevant publication is found.</p>}</section>;
 }
