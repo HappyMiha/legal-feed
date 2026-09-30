@@ -5,7 +5,7 @@ import {Button} from '../components/controls';
 import {Input} from '@/components/ui/input';
 
 export type AuthMode='register'|'login'|'forgot-password'|'reset-password'|'verify-email';
-const titles:Record<AuthMode,string>={register:'Create your account',login:'Welcome back','forgot-password':'Reset your password','reset-password':'Choose a new password','verify-email':'Confirm your email'};
+const titles:Record<AuthMode,string>={register:'Create your Legal Feed account',login:'Sign in to Legal Feed','forgot-password':'Reset your password','reset-password':'Choose a new password','verify-email':'Confirm your email'};
 export default function AuthForm({mode='register'}:{mode?:AuthMode}){
  const [name,setName]=useState(''),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[confirm,setConfirm]=useState('');
  const [token,setToken]=useState(''),[change,setChange]=useState(false),[returnTo,setReturnTo]=useState('/');
@@ -25,14 +25,14 @@ export default function AuthForm({mode='register'}:{mode?:AuthMode}){
  };
  return <main className="auth-page"><section className="auth-card" aria-labelledby="auth-title">
   <a className="auth-brand" href="/"><BrandLockup/></a>
-  <div className="auth-heading"><h1 id="auth-title">{message?'Check your email':titles[mode]}</h1><p className="muted">{mode==='register'?'Start monitoring the legal topics that matter to you.':mode==='login'?'Sign in to your Legal Feed account.':mode==='forgot-password'?'We will email you a link to choose a new password.':mode==='reset-password'?'Use at least 10 characters. Your other sessions will be signed out.':'Confirm this address to continue to Legal Feed.'}</p></div>
+  <div className="auth-heading"><h1 id="auth-title">{message?'Check your email':titles[mode]}</h1><p className="muted">{mode==='register'?'Follow Swiss legal topics in your personal feed and receive updates by email. Confirm your email to start setting up your first monitoring profile.':mode==='login'?'Continue to your monitoring profiles, saved articles and legal updates.':mode==='forgot-password'?'We will email you a link to choose a new password.':mode==='reset-password'?'Use at least 10 characters. Your other sessions will be signed out.':'Confirm this address to continue to Legal Feed.'}</p></div>
   {message?<div className="auth-message" role="status"><p>{message}</p><p className="muted">Check your spam folder too. Verification links expire after 30 minutes.</p><Button variant="outline" onClick={()=>setMessage('')}>Try again</Button></div>:<form onSubmit={submit} className="auth-form">
    {mode==='register'&&<label className="field">Name<Input autoComplete="name" required maxLength={120} value={name} onChange={e=>setName(e.target.value)}/></label>}
    {(mode==='register'||mode==='login'||mode==='forgot-password')&&<label className="field">Email<Input type="email" autoComplete="email" required maxLength={254} value={email} onChange={e=>setEmail(e.target.value)}/></label>}
    {(mode==='register'||mode==='login'||mode==='reset-password')&&<label className="field">Password<Input type="password" autoComplete={mode==='login'?'current-password':'new-password'} required minLength={mode==='login'?1:10} maxLength={128} value={password} onChange={e=>setPassword(e.target.value)}/>{mode==='register'&&<span className="muted">At least 10 characters.</span>}</label>}
    {(mode==='register'||mode==='reset-password')&&<label className="field">Confirm password<Input type="password" autoComplete="new-password" required minLength={10} maxLength={128} value={confirm} onChange={e=>setConfirm(e.target.value)}/></label>}
    {error&&<p className="error" role="alert">{error}</p>}
-   {(mode==='verify-email'||mode==='reset-password')&&!token?<p role="alert">Open the link from your email to continue.</p>:<Button type="submit" disabled={busy}>{busy?'Please wait…':mode==='register'?'Create account':mode==='login'?'Sign in':mode==='forgot-password'?'Send reset link':mode==='reset-password'?'Save password':'Confirm email'}</Button>}
+   {(mode==='verify-email'||mode==='reset-password')&&!token?<p role="alert">Open the link from your email to continue.</p>:<Button type="submit" disabled={busy}>{busy?'Please wait…':mode==='register'?'Create Legal Feed account':mode==='login'?'Sign in':mode==='forgot-password'?'Send reset link':mode==='reset-password'?'Save password':'Confirm email'}</Button>}
    {mode==='login'&&<a className="auth-link" href="/forgot-password">Forgot password?</a>}
   </form>}
   <div className="auth-footer">{mode==='register'?<>Already have an account? <a href={'/login?return_to='+encodeURIComponent(returnTo)}>Sign in</a></>:mode==='login'?<>New to Legal Feed? <a href={'/register?return_to='+encodeURIComponent(returnTo)}>Create an account</a></>:<a href="/login">Back to sign in</a>}</div>

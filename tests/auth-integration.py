@@ -9,7 +9,7 @@ class EmailAuthentication(unittest.TestCase):
  def test_01_public_registration_and_removed_chatgpt_auth(self):
   with urllib.request.urlopen(BASE+'/') as response:
    self.assertEqual(response.status,200);html=response.read().decode();self.assertIn('LEGAL FEED',html);self.assertIn('href="/register"',html);self.assertIn('href="/login"',html);self.assertNotIn('signin-with-chatgpt',html);self.assertIn('noindex',html)
-  with urllib.request.urlopen(BASE+'/register') as response:self.assertIn('Create your account',response.read().decode())
+  with urllib.request.urlopen(BASE+'/register') as response:self.assertIn('Create your Legal Feed account',response.read().decode())
   with urllib.request.urlopen(BASE+'/updates/private-record') as response:self.assertIn('/login?return_to=',response.url)
   self.assertEqual(request('state',cookie='__sites_local_auth=1',headers={'oai-authenticated-user-id':'fake','oai-authenticated-user-email':'test@example.test'})[0],401)
   self.assertEqual(request('auth/register','POST',{},origin=False)[0],403)

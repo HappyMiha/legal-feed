@@ -1396,13 +1396,15 @@ dd {
 .landing-rule { width: 42px; height: 1px; background: #737981; margin: 28px 0 24px; }
 .landing-problem p { font-size: clamp(1.2rem, 2vw, 1.8rem); line-height: 1.28; color: #c4c8ce; }
 .landing-waves { position: absolute; width: 120%; height: 200px; left: -10%; bottom: 0; color: #768798; opacity: .2; pointer-events: none; }
-.landing-main { padding: clamp(40px, 5.5vw, 88px) clamp(28px, 3.3vw, 64px) 36px; display: flex; flex-direction: column; justify-content: center; gap: 28px; min-width: 0; }
-.landing-kicker { color: #646970; font-size: .875rem; margin-bottom: 16px; }
-.landing-intro h1 { font-size: clamp(3.25rem, 6.5vw, 6.4rem); line-height: .95; letter-spacing: -.065em; font-weight: 750; margin: 0 0 26px; }
+.landing-main { padding: clamp(40px, 5.5vw, 88px) clamp(28px, 3.3vw, 64px) 36px; display: flex; flex-direction: column; justify-content: flex-start; gap: 32px; min-width: 0; }
+.landing-kicker { color: #646970; font-size: .875rem; font-weight: 600; letter-spacing: .055em; margin-bottom: 20px; }
+.landing-intro h1 { font-size: clamp(2.5rem, 4.5vw, 4.5rem); line-height: 1.04; letter-spacing: -.045em; font-weight: 750; margin: 0 0 24px; max-width: 760px; }
 .landing-intro h2 { font-size: clamp(1.3rem, 2vw, 1.9rem); line-height: 1.25; letter-spacing: -.025em; }
 .landing-description { font-size: clamp(1.1rem, 1.6vw, 1.4rem); line-height: 1.4; color: #62666c; margin-top: 20px; max-width: 780px; }
 .landing-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
 .landing-actions [data-slot="button"] { min-height: 50px; padding: 12px 24px; font-size: 1rem; border-radius: 8px; text-decoration: none; }
+.landing-signup-note { color: #62666c; font-size: .9375rem; line-height: 1.5; margin-top: 14px; }
+.landing-onboarding h2 { font-size: 1.25rem; line-height: 1.3; margin-bottom: 18px; }
 .landing-provider { border: 1px solid #e6e7e8; border-radius: 8px; background: #f8f9fa; display: flex; align-items: center; gap: 16px; padding: 12px 16px; font-size: 1rem; line-height: 1.45; }
 .landing-provider p span { color: #62666c; }
 .landing-icon { width: 48px; height: 48px; border-radius: 50%; background: #eeeff0; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -1411,10 +1413,23 @@ dd {
 .landing-steps li { position: relative; text-align: center; padding: 25px 10px 18px; border: 1px solid #e5e6e8; border-radius: 8px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .landing-step-number { position: absolute; top: 8px; left: 8px; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; background: #f1f2f3; font-size: .875rem; font-weight: 600; }
 .landing-step-icon { width: 34px; height: 34px; margin: 6px 0; stroke-width: 1.6; }
-.landing-steps h3 { font-size: 1rem; text-transform: uppercase; letter-spacing: -.02em; }
+.landing-steps h3 { font-size: 1rem; letter-spacing: -.02em; }
 .landing-steps p { font-size: .9375rem; line-height: 1.4; color: #62666c; }
 .landing-step-arrow { position: absolute; width: 20px; right: -25px; top: calc(50% - 10px); color: #898e95; stroke-width: 1.4; }
 .landing-credit { border-top: 1px solid #e6e7e8; padding-top: 24px; display: flex; align-items: center; gap: 18px; font-size: .9375rem; line-height: 1.5; }
 .landing-names { color: #62666c; margin-top: 5px; }
 @media(max-width: 1000px) { .landing { grid-template-columns: minmax(260px, .85fr) minmax(0, 1.6fr); } .landing-steps { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; } .landing-step-arrow { display: none; } }
-@media(max-width: 760px) { .landing { grid-template-columns: 1fr; } .landing-statement { gap: 28px; padding: 26px 24px 34px; } .landing-problem { max-width: 620px; } .landing-problem h2 { font-size: clamp(1.75rem, 6vw, 2.6rem); max-width: 580px; } .landing-problem p,.landing-rule { display: none; } .landing-waves { height: 140px; bottom: -50px; } .landing-main { padding: 36px 24px; gap: 24px; } .landing-intro h1 { font-size: clamp(2.75rem, 10.5vw, 4.75rem); margin-bottom: 20px; } .landing-actions [data-slot="button"] { flex: 1; } .landing-provider { align-items: flex-start; } .landing-credit { align-items: flex-start; } }
+@media(max-width: 760px), (max-width: 1100px) and (hover: none) and (pointer: coarse), (max-device-width: 760px) and (pointer: coarse) {
+ .landing { grid-template-columns: 1fr; min-height: 100svh; }
+ .landing-statement { padding: 22px 24px; gap: 0; }
+ .landing-problem,.landing-waves { display: none; }
+ .landing-main { padding: 32px 24px; gap: 32px; }
+ .landing-kicker { margin-bottom: 16px; }
+ .landing-intro h1 { font-size: clamp(2.25rem, 8.5vw, 3.5rem); margin-bottom: 20px; }
+ .landing-description { font-size: 1.125rem; margin-top: 0; }
+ .landing-actions { display: grid; grid-template-columns: 1fr; margin-top: 24px; }
+ .landing-actions [data-slot="button"] { width: 100%; min-height: 52px; white-space: normal; }
+ .landing-steps { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+ .landing-step-arrow { display: none; }
+ .landing-provider,.landing-credit { align-items: flex-start; }
+}
