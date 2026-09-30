@@ -1,10 +1,6 @@
 import type {AppState,Account,MonitoringProfile,Update} from '../domain/monitoring';
 import {database,HttpError} from './runtime';
-import type {ChatGPTUser} from '../../app/chatgpt-auth';
-export async function ensureAccount(user:ChatGPTUser){
- const account:Account={name:user.fullName||user.email.split('@')[0],email:user.email,firm:'',quiet_start:'22:00',quiet_end:'07:00',defaults:{frequency:'both',channels:['email'],relevance_threshold:'high',digest_day:'monday',digest_time:'07:00'}};
- await database().prepare('INSERT INTO accounts(id,data,created_at) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING').bind(user.userId,JSON.stringify(account),new Date().toISOString()).run();
-}
+export function defaultAccount(name:string,email:string):Account{return {name,email,firm:'',quiet_start:'22:00',quiet_end:'07:00',defaults:{frequency:'both',channels:['email'],relevance_threshold:'high',digest_day:'monday',digest_time:'07:00'}};}
 export async function getAccount(owner:string){const row=await database().prepare('SELECT data,password_hash FROM accounts WHERE id=?').bind(owner).first<{data:string;password_hash:string|null}>();if(!row)throw new HttpError(404,'Account unavailable.');return {...JSON.parse(row.data),has_password:!!row.password_hash} as Account;}
 export async function getProfiles(owner:string){const rows=await database().prepare('SELECT data FROM profiles WHERE owner_id=? ORDER BY rowid').bind(owner).all<{data:string}>();return rows.results.map(r=>JSON.parse(r.data) as MonitoringProfile);}
 export async function getProfile(owner:string,id:string){const row=await database().prepare('SELECT data FROM profiles WHERE id=? AND owner_id=?').bind(id,owner).first<{data:string}>();if(!row)throw new HttpError(404,'Profile unavailable.');return JSON.parse(row.data) as MonitoringProfile;}

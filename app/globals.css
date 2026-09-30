@@ -1369,3 +1369,16 @@ dd {
 .unread-label {
   font-size: 13px;
 }
+
+.auth-page { min-height: 100dvh; display: grid; place-items: center; padding: 40px 20px; }
+.auth-card { width: min(100%, 440px); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 36px; }
+.auth-brand { display: inline-flex; color: var(--text-primary); text-decoration: none; margin-bottom: 40px; }
+.auth-heading { display: grid; gap: 12px; margin-bottom: 28px; }
+.auth-heading h1 { font-size: 30px; }
+.auth-form, .auth-message { display: grid; gap: 20px; }
+.auth-form .field + .field { margin-top: 0; }
+.auth-form [data-slot="button"] { width: 100%; }
+.auth-link, .auth-footer a { color: var(--text-primary); text-decoration: underline; text-underline-offset: 3px; }
+.auth-link { text-align: center; }
+.auth-footer { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 24px; font-size: 14px; text-align: center; }
+@media(max-width: 480px) { .auth-card { padding: 28px 22px; } .auth-page { padding: 20px 12px; } }

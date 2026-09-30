@@ -4,6 +4,8 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Legal Feed",
   description: "Legal monitoring profiles and updates.",
+  robots: {index:false,follow:false},
+  referrer: 'no-referrer',
   other: {
     "codex-preview": "development",
   },

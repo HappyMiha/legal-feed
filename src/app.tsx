@@ -19,6 +19,7 @@ import {
 import { Empty } from "@/components/ui/empty";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {registerMonitoringTools} from "./production/webmcp";
+import {api} from './production/api';
 import { BrandLockup } from "./components/brand";
 import { Button } from "./components/controls";
 import type { RuntimeConfig, MonitoringProfile, Update } from "./domain/monitoring";
@@ -190,7 +191,7 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
       />
     );
   else if (path === "/settings")
-    content = <SettingsPage state={state} config={config} actions={actions} />;
+    content = <SettingsPage key={state.account_id} state={state} config={config} actions={actions} />;
   else if (path === "/" || path === "/feed")
     content = (
       <Feed
@@ -265,6 +266,7 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
             <Settings2 />
             Settings
           </button>
+          <button className="settings-link" onClick={()=>void run(async()=>{await api('auth/logout','POST',{});stateStore.reset();location.assign('/login');})}>Sign out</button>
           <div className="account-lockup">
             <Avatar className="avatar" aria-hidden="true">
 

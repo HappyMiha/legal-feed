@@ -250,6 +250,7 @@ export function SettingsPage({
   actions: Actions;
 }) {
   const [account, setAccount] = useState<Account>(state.account);
+  const [emailPassword,setEmailPassword]=useState('');
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -258,7 +259,7 @@ export function SettingsPage({
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
   const save = async () => {
-    await api("account","PUT",account);
+    await api("account","PUT",{...account,currentPassword:emailPassword});setEmailPassword('');
     await stateStore.refresh();
     toast.success(stateStore.read().account.pending_email ? "Settings saved. Check your new email for a verification link." : "Settings saved");
   };
@@ -274,7 +275,7 @@ export function SettingsPage({
     setWorking(true);setError("");
     try{
       await api("account","DELETE",{password,confirmation});
-      stateStore.reset();location.assign('/signout-with-chatgpt?return_to=/');
+      stateStore.reset();location.assign('/register');
     }catch(error){setError(error instanceof Error?error.message:"Could not delete account.");}
     finally{setWorking(false);}
   };
@@ -312,7 +313,8 @@ export function SettingsPage({
                 }
               />
             </label>
-            {state.account.pending_email && <p className="muted">Verification pending for {state.account.pending_email}. Check your email within 15 minutes.</p>}
+            {account.email.toLowerCase()!==state.account.email.toLowerCase() && <label className="field">Current password<Input type="password" autoComplete="current-password" value={emailPassword} required onChange={e=>setEmailPassword(e.target.value)}/></label>}
+            {state.account.pending_email && <p className="muted">Verification pending for {state.account.pending_email}. Confirm the link sent to your new address.</p>}
             <label className="field">
               Firm
               <Input
@@ -336,7 +338,7 @@ export function SettingsPage({
                   ? "Change password"
                   : "Set password"}
               </Button>
-              <p className="muted">Sign-in with ChatGPT. Password confirmation protects account deletion.</p>
+              <p className="muted">Your password is used to sign in and confirm account deletion.</p>
             </div>
           </div>
         </section>
@@ -441,8 +443,8 @@ export function SettingsPage({
         </div>
       </section>
       <Modal
-        title="Set password"
-        description="Set an additional password to confirm sensitive account actions. Sign-in is managed by ChatGPT."
+        title="Change password"
+        description="Choose a new sign-in password. Other sessions will be signed out."
         open={passwordOpen}
         onClose={() => setPasswordOpen(false)}
       >
@@ -470,7 +472,7 @@ export function SettingsPage({
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              minLength={8}
+              minLength={10}
               required
             />
           </label>

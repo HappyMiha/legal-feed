@@ -1,20 +1,16 @@
 """Run against local dev server and local D1. Never seed production."""
 import concurrent.futures, glob, json, os, sqlite3, unittest, urllib.request, urllib.error, uuid
-BASE=os.environ.get('LEGAL_FEED_TEST_URL','http://localhost:5173')
-assert BASE.startswith(('http://localhost:', 'http://127.0.0.1:')), 'Tests require a local isolated instance.'
-
+from auth_support import BASE, request, signup, clean, db_path
+COOKIE=''
 def call(path,method='GET',data=None,auth=True,origin=True):
- headers={'Content-Type':'application/json'}
- if auth: headers['Cookie']='__sites_local_auth=1'
- if origin: headers['Origin']=BASE
- req=urllib.request.Request(BASE+'/api/'+path,data=json.dumps(data).encode() if data is not None else None,headers=headers,method=method)
- try:
-  with urllib.request.urlopen(req,timeout=20) as r:return r.status,json.load(r)
- except urllib.error.HTTPError as r:return r.code,json.load(r)
+ status,value,_=request(path,method,data,cookie=COOKIE if auth else '',origin=origin)
+ return status,value
 
 class ProductionAPI(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
+  global COOKIE
+  _,COOKIE,cls.test_owner=signup()
   status,state=call('state');assert status==200,state
   cls.owner=state['account_id'];cls.ids=[]
   files=glob.glob('.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite')
@@ -28,6 +24,7 @@ class ProductionAPI(unittest.TestCase):
    db.execute('PRAGMA foreign_keys=ON')
    for id in cls.ids:db.execute('DELETE FROM profiles WHERE id=?',(id,))
    db.execute("DELETE FROM accounts WHERE id='integration-other'")
+  clean([cls.test_owner])
  def test_01_authentication_and_csrf(self):
   self.assertEqual(call('state',auth=False)[0],401)
   self.assertEqual(call('topics','POST',{'input':'test'},origin=False)[0],403)
@@ -64,7 +61,10 @@ class ProductionAPI(unittest.TestCase):
  def test_06_settings_password(self):
   account=call('state')[1]['account'];account['firm']='Integration test firm';self.assertEqual(call('account','PUT',account)[0],200)
   self.assertEqual(call('state')[1]['account']['firm'],'Integration test firm')
-  self.assertEqual(call('account/password','POST',{'currentPassword':'IntegrationPass123','newPassword':'IntegrationPass123'})[0],200)
+  global COOKIE
+  result,password_data,response_headers=request('account/password','POST',{'currentPassword':'IntegrationPass123','newPassword':'IntegrationPass123'},cookie=COOKIE)
+  self.assertEqual(result,200,password_data)
+  COOKIE=response_headers['Set-Cookie'].split(';')[0]
   self.assertTrue(call('state')[1]['account']['has_password'])
   self.assertNotIn('password_hash',call('account/export')[1]['account'])
   self.assertEqual(call('account','DELETE',{'password':'wrong','confirmation':'DELETE'})[0],400)

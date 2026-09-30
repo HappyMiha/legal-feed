@@ -1,8 +1,9 @@
-import LegalFeedApp from "@/src/app";
-import {requireChatGPTUser} from "../chatgpt-auth";
-export const dynamic="force-dynamic";
-async function Protected({returnTo}:{returnTo:string}){await requireChatGPTUser(returnTo);return <LegalFeedApp config={{summaryNotice:true,processingModel:"Swisscom Apertus 1.5 70B",deployment:"Production",hostingLocation:"Cloudflare · AI processing: Swisscom"}}/>;}
-export default async function Page({params,searchParams}:{params:Promise<{path:string[]}>;searchParams:Promise<Record<string,string|string[]|undefined>>}){
- const {path}=await params,query=await searchParams;const search=new URLSearchParams();for(const [key,value] of Object.entries(query)){if(Array.isArray(value))value.forEach(v=>search.append(key,v));else if(value!==undefined)search.set(key,value);}
- return <Protected returnTo={'/'+path.map(encodeURIComponent).join('/')+(search.size?'?'+search:'')}/>;
+import Home from '../page';
+import AuthForm,{type AuthMode} from '@/src/features/auth';
+export const dynamic='force-dynamic';
+const modes:AuthMode[]=['register','login','forgot-password','reset-password','verify-email'];
+export default async function Page({params}:{params:Promise<{path:string[]}>}){
+ const {path}=await params;
+ if(path.length===1&&modes.includes(path[0] as AuthMode))return <AuthForm mode={path[0] as AuthMode}/>;
+ return <Home/>;
 }
