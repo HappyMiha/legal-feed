@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {z} from 'zod';
-import {providerJson,AnalysisDeferred,retryDelay,providerReadyAt} from '../src/server/ai-provider';
+import {providerJson,AnalysisDeferred,InvalidAnalysis,retryDelay,providerReadyAt} from '../src/server/ai-provider';
+import {analysisContract,ANALYSIS_SYSTEM} from '../src/server/analysis-contract';
+import {invalidAnalysisRetry} from '../src/server/monitor-policy';
 import {articleText,limitedText,textContent} from '../src/server/source-text';
 
 function database(){
@@ -51,5 +53,32 @@ test('legacy source charset, HTML entities and judgment paragraphs remain readab
 test('valid JSON from a truncated completion cannot mark documents as processed',async(t)=>{
  const {db,sqlite}=database();
  t.mock.method(globalThis,'fetch',async()=>Response.json({choices:[{message:{content:'{"ok":true}'},finish_reason:'length'}]}));
- await assert.rejects(providerJson(db,config,'test',{},schema),/did not complete/);sqlite.close();
+ t.mock.method(console,'error',()=>{});
+ await assert.rejects(providerJson(db,config,'test',{},schema),(error:unknown)=>error instanceof InvalidAnalysis&&error.kind==='incomplete');sqlite.close();
+});
+test('monitoring requests compact JSON and an unambiguous empty-match result',async(t)=>{
+ const {db,sqlite}=database(),contract=analysisContract(1,['topic-1']);let sent:{response_format?:{type:string};messages?:{content:string}[]}|undefined;
+ t.mock.method(globalThis,'fetch',async(_url:RequestInfo|URL,init?:RequestInit)=>{sent=JSON.parse(String(init?.body));return Response.json({choices:[{message:{content:'{"matches":[]}'},finish_reason:'stop'}]});});
+ assert.deepEqual(await providerJson(db,config,ANALYSIS_SYSTEM,{},contract,5000,'legal_matches'),{matches:[]});
+ assert.equal(sent?.response_format?.type,'json_object');assert.ok(sent?.messages?.[0].content.includes('compact valid JSON on one line'));
+ assert.ok(ANALYSIS_SYSTEM.includes('return exactly {"matches":[]}'));assert.ok(!ANALYSIS_SYSTEM.includes('[] is correct'));sqlite.close();
+});
+test('malformed or semantically invalid AI results stay failures instead of becoming empty matches',async(t)=>{
+ const {db,sqlite}=database(),contract=analysisContract(2,['topic-1']);
+ const match={index:0,topic_ids:['topic-1'],relevance:'high',summary:'A factual summary of the supplied publication.',why_it_matters:'Direct relevance to this monitoring topic.',legal_basis:''};
+ let raw='not JSON';const diagnostics:unknown[]=[];
+ t.mock.method(console,'error',(...args:unknown[])=>{diagnostics.push(args);});
+ t.mock.method(globalThis,'fetch',async()=>Response.json({id:'test-request',choices:[{message:{content:raw},finish_reason:'stop'}]}));
+ for(const bad of ['not JSON','[]','{"matches":null}',JSON.stringify({matches:[{...match,topic_ids:['unknown-private-topic']}]}),JSON.stringify({matches:[match,match]}),JSON.stringify({matches:[{...match,index:2}]}),JSON.stringify({matches:[{...match,summary:''}]})]){
+  raw=bad;sqlite.exec('DELETE FROM ai_provider_state');
+  await assert.rejects(providerJson(db,config,ANALYSIS_SYSTEM,{},contract,5000,'legal_matches'),InvalidAnalysis);
+ }
+ assert.equal(diagnostics.length,7);assert.ok(!JSON.stringify(diagnostics).includes('unknown-private-topic'));
+ sqlite.exec('DELETE FROM ai_provider_state');raw=JSON.stringify({matches:[match]});
+ assert.deepEqual(await providerJson(db,config,ANALYSIS_SYSTEM,{},contract,5000,'legal_matches'),{matches:[match]});sqlite.close();
+});
+test('invalid analyses receive two prompt retries, then back off without discarding the source',()=>{
+ const first=invalidAnalysisRetry(0,1000),second=invalidAnalysisRetry(first.attempts,1000),third=invalidAnalysisRetry(second.attempts,1000);
+ assert.equal(first.status,'retrying');assert.equal(first.nextRun,32000);assert.equal(second.status,'retrying');assert.equal(second.nextRun,63000);
+ assert.equal(third.status,'error');assert.equal(third.nextRun,3601000);assert.equal(invalidAnalysisRetry(100).attempts,3);
 });
