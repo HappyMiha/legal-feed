@@ -18,9 +18,10 @@ export async function monitorNext(owner?:string,profileId?:string){
  const lock=await db.prepare("UPDATE profiles SET lease_until=?,lease_token=? WHERE id=? AND status='active' AND lease_until<? RETURNING id,data").bind(now+180000,token,candidate.id,now).first<{id:string;data:string}>();if(!lock)return {processed:false};
  const profile=JSON.parse(lock.data) as MonitoringProfile;
  try{
-  const checks=await db.prepare('SELECT source_id,next_run,analysis_attempts FROM source_checks WHERE profile_id=?').bind(profile.id).all<{source_id:string;next_run:number;analysis_attempts:number}>();
+  const checks=await db.prepare('SELECT source_id,next_run,analysis_attempts,status FROM source_checks WHERE profile_id=?').bind(profile.id).all<{source_id:string;next_run:number;analysis_attempts:number;status:string}>();
   const due=new Map(checks.results.map(r=>[r.source_id,r.next_run]));
-  const source=profile.sources.filter(s=>s.active).sort((a,b)=>(due.get(a.id)||0)-(due.get(b.id)||0))[0];
+  const retrying=new Set(checks.results.filter(check=>check.status==='retrying'&&check.next_run<=now).map(check=>check.source_id));
+  const source=profile.sources.filter(s=>s.active).sort((a,b)=>Number(retrying.has(b.id))-Number(retrying.has(a.id))||(due.get(a.id)||0)-(due.get(b.id)||0))[0];
   if(!source||(due.get(source.id)||0)>now){await db.prepare('UPDATE profiles SET next_run=? WHERE id=? AND lease_token=?').bind(source?due.get(source.id)!:now+15*60000,profile.id,token).run();return {processed:true,idle:true};}
   let count=0,status='ok',detail='',nextRun=now+3600000,retryAt:number|undefined;
   let analysisAttempts=checks.results.find(check=>check.source_id===source.id)?.analysis_attempts||0;

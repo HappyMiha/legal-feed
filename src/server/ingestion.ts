@@ -2,7 +2,7 @@ import type {MonitoringProfile,Source,Update} from '../domain/monitoring';
 import {publicFetch,limitedText,textContent,safeUrl,hash} from './security';
 import {runtime} from './runtime';
 import {aiJson} from './ai';
-import {analysisContract,ANALYSIS_SYSTEM} from './analysis-contract';
+import {analysisContract,analysisTopicRefs,ANALYSIS_SYSTEM} from './analysis-contract';
 import {InvalidAnalysis} from './ai-provider';
 import {parseFeed,type Article} from './feed';
 import {articleText} from './source-text';
@@ -62,11 +62,11 @@ export async function collect(source:Source,profile:MonitoringProfile):Promise<A
 export async function analyse(articles:Article[],source:Source,profile:MonitoringProfile):Promise<{update:Update;sourceText:string}[]>{
  if(!articles.length)return [];
  const topics=profile.topics.filter(t=>t.selected);
- const contract=analysisContract(articles.length,topics.map(topic=>topic.id));
- const result=await aiJson(ANALYSIS_SYSTEM,{profile:profile.name,topics:topics.map(({id,title,description})=>({id,title,description})),articles:articles.map((a,index)=>({index,title:a.title,date:a.date,date_kind:a.dateKind,text:a.text.slice(0,6500)}))},contract,5000,'legal_matches');
+ const references=analysisTopicRefs(topics),contract=analysisContract(articles.length,references.map(reference=>reference.id));
+ const result=await aiJson(ANALYSIS_SYSTEM,{profile:profile.name,topics:references.map(({id,topic:{title,description}})=>({id,title,description})),articles:articles.map((a,index)=>({index,title:a.title,date:a.date,date_kind:a.dateKind,text:a.text.slice(0,6500)}))},contract,5000,'legal_matches');
  const output:{update:Update;sourceText:string}[]=[];
  const indices=new Set<number>();
- for(const match of result.matches){const a=articles[match.index];const selected=topics.filter(t=>match.topic_ids.includes(t.id));if(!a||!selected.length||match.topic_ids.some(id=>!topics.some(t=>t.id===id))||indices.has(match.index))throw new InvalidAnalysis('references');indices.add(match.index);
+ for(const match of result.matches){const a=articles[match.index];const selected=references.filter(reference=>match.topic_ids.includes(reference.id)).map(reference=>reference.topic);if(!a||!selected.length||match.topic_ids.some(id=>!references.some(reference=>reference.id===id))||indices.has(match.index))throw new InvalidAnalysis('references');indices.add(match.index);
   const id=await hash(profile.id+':'+a.url);output.push({sourceText:a.text,update:{id,profile_id:profile.id,source_id:source.id,topic_ids:selected.map(t=>t.id),headline:a.title,summary:match.summary,why_it_matters:match.why_it_matters,relevance:match.relevance,url:a.url,published_at:a.date,read:false,saved:false,hidden:false,client_name:profile.name.split(':')[0].trim(),source_name:source.name,source_section:source.section,topic_title:selected.map(t=>t.title).join(' · '),legal_basis:match.legal_basis&&a.text.includes(match.legal_basis)?match.legal_basis:'Not specified in the source',date_kind:a.dateKind}});
  }return output;
 }

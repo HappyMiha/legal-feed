@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {z} from 'zod';
 import {providerJson,AnalysisDeferred,InvalidAnalysis,retryDelay,providerReadyAt} from '../src/server/ai-provider';
-import {analysisContract,ANALYSIS_SYSTEM} from '../src/server/analysis-contract';
+import {analysisContract,analysisTopicRefs,ANALYSIS_SYSTEM} from '../src/server/analysis-contract';
 import {invalidAnalysisRetry} from '../src/server/monitor-policy';
 import {articleText,limitedText,textContent} from '../src/server/source-text';
 
@@ -81,4 +81,12 @@ test('invalid analyses receive two prompt retries, then back off without discard
  const first=invalidAnalysisRetry(0,1000),second=invalidAnalysisRetry(first.attempts,1000),third=invalidAnalysisRetry(second.attempts,1000);
  assert.equal(first.status,'retrying');assert.equal(first.nextRun,32000);assert.equal(second.status,'retrying');assert.equal(second.nextRun,63000);
  assert.equal(third.status,'error');assert.equal(third.nextRun,3601000);assert.equal(invalidAnalysisRetry(100).attempts,3);
+});
+test('short model references resolve to the original selected topic IDs',()=>{
+ const topics=[{id:'5b13f918-731e-48c1-beca-127c77084a73',title:'Tax',description:'Tax law',origin:'user' as const,selected:true},{id:'619d0908-d0a9-4376-8fe8-99e21e240998',title:'Employment',description:'Employment law',origin:'user' as const,selected:true}];
+ const refs=analysisTopicRefs(topics);assert.deepEqual(refs.map(ref=>ref.id),['T1','T2']);
+ const matched=['T2'];assert.deepEqual(refs.filter(ref=>matched.includes(ref.id)).map(ref=>ref.topic.id),[topics[1].id]);
+ const contract=analysisContract(1,refs.map(ref=>ref.id));
+ const match={index:0,topic_ids:['T2'],relevance:'high',summary:'A factual summary of a relevant employment decision.',why_it_matters:'Relevant to the selected employment monitoring topic.',legal_basis:''};
+ assert.ok(contract.safeParse({matches:[match]}).success);assert.ok(!contract.safeParse({matches:[{...match,topic_ids:['T3']}]}).success);
 });
