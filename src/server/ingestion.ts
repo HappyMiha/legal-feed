@@ -4,16 +4,16 @@ import {runtime} from './runtime';
 import {aiJson} from './ai';
 import {z} from 'zod';
 import {parseFeed,type Article} from './feed';
+import {articleText} from './source-text';
 const tag=(html:string,name:string)=>textContent(html.match(new RegExp(`<${name}\\b[^>]*>([\\s\\S]*?)<\\/${name}>`,'i'))?.[1]||'');
 export async function extractArticle(url:string,title=''):Promise<Article>{
  const response=await publicFetch(url);const type=response.headers.get('content-type')||'';
  if(!/html|xml|text|json/.test(type))throw Error('Source document is not readable text.');
  const html=await limitedText(response);if(/incapsula|captcha|access denied|just a moment/i.test(html.slice(0,5000)))throw Error('Source requires interactive access.');
- const main=html.match(/<(article|main)\b[^>]*>([\s\S]*?)<\/\1>/i)?.[2]||html;
- const body=textContent(main);if(body.length<120)throw Error('Source requires JavaScript or has no readable text.');
+ const body=articleText(html);if(body.length<120)throw Error('Source requires JavaScript or has no readable text.');
  const dateMatch=html.match(/(?:datePublished|article:published_time)["']?\s*(?:content\s*=|:|[^>]*content=)\s*["']([^"']+)["']/i)?.[1]||html.match(/<time\b[^>]*datetime=["']([^"']+)/i)?.[1];
  const date=new Date(dateMatch||'');
- return {url:safeUrl(response.url||url).href,title:title||textContent(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]||tag(html,'title')),text:body.slice(0,18000),date:Number.isFinite(date.getTime())?date.toISOString().slice(0,10):new Date().toISOString().slice(0,10),dateKind:Number.isFinite(date.getTime())?'published':'discovered'};
+ return {url:safeUrl(response.url||url).href,title:title||textContent(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]||tag(html,'title')),text:body,date:Number.isFinite(date.getTime())?date.toISOString().slice(0,10):new Date().toISOString().slice(0,10),dateKind:Number.isFinite(date.getTime())?'published':'discovered'};
 }
 async function search(source:Source,profile:MonitoringProfile):Promise<Article[]>{
  const key=runtime().SEARCH_API_KEY;if(!key)throw Error('Search connector unavailable.');

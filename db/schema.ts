@@ -25,8 +25,11 @@ export const updates = sqliteTable('updates', {
   id: text('id').primaryKey(), ownerId: text('owner_id').notNull().references(() => accounts.id,{onDelete:'cascade'}), profileId: text('profile_id').notNull().references(() => profiles.id,{onDelete:'cascade'}), canonicalUrl: text('canonical_url').notNull(), data: text('data').notNull(), sourceText: text('source_text').notNull(), discoveredAt: text('discovered_at').notNull(),
 }, t => [index('updates_owner').on(t.ownerId), uniqueIndex('updates_profile_url').on(t.profileId,t.canonicalUrl)]);
 export const sourceChecks = sqliteTable('source_checks', {
-  id: text('id').primaryKey(), profileId: text('profile_id').notNull().references(() => profiles.id,{onDelete:'cascade'}), sourceId: text('source_id').notNull(), checkedAt: text('checked_at').notNull(), status: text('status').notNull(), detail: text('detail').notNull(),
+  id: text('id').primaryKey(), profileId: text('profile_id').notNull().references(() => profiles.id,{onDelete:'cascade'}), sourceId: text('source_id').notNull(), checkedAt: text('checked_at').notNull(), status: text('status').notNull(), detail: text('detail').notNull(), nextRun: integer('next_run').notNull().default(0),
 }, t=>[index('checks_profile').on(t.profileId)]);
+export const aiProviderState = sqliteTable('ai_provider_state', {
+  id:text('id').primaryKey(),nextRequestAt:integer('next_request_at').notNull().default(0),leaseUntil:integer('lease_until').notNull().default(0),leaseToken:text('lease_token'),failures:integer('failures').notNull().default(0),
+});
 export const outbox = sqliteTable('outbox', {
   id: text('id').primaryKey(), ownerId: text('owner_id').notNull().references(()=>accounts.id,{onDelete:'cascade'}), profileId: text('profile_id').notNull().references(()=>profiles.id,{onDelete:'cascade'}), data: text('data').notNull(), status: text('status').notNull().default('pending'), attempts: integer('attempts').notNull().default(0), nextAttempt: integer('next_attempt').notNull().default(0), providerId: text('provider_id'), error: text('error'), createdAt: text('created_at').notNull(), sentAt: text('sent_at'),
 }, t=>[index('outbox_due').on(t.status,t.nextAttempt),index('outbox_owner').on(t.ownerId)]);

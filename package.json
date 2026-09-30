@@ -13,7 +13,7 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/backend.test.ts && python3 tests/delivery-runner.py",
+    "test": "tsx --test tests/*.test.ts && python3 tests/delivery-runner.py",
     "test:api": "python3 tests/api-integration.py && python3 tests/auth-integration.py",
     "db:local": "node scripts/local-db.mjs"
   },
@@ -27,6 +27,7 @@
     "date-fns": "^4.4.0",
     "drizzle-orm": "0.45.2",
     "embla-carousel-react": "^8.6.0",
+    "htmlparser2": "^10.0.0",
     "input-otp": "^1.4.2",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.31.0",

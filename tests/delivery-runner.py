@@ -21,4 +21,12 @@ class DeliveryTests(unittest.TestCase):
   with patch.object(runner,'api',side_effect=api),patch.object(runner.smtplib,'SMTP',side_effect=OSError('unavailable')):
    with self.assertRaises(OSError):runner.deliver()
   self.assertEqual(len(calls),2);self.assertTrue(all(c['unattempted'] for c in calls))
+ def test_provider_cooldown_retries_without_stopping_email_delivery(self):
+  results=iter([{'processed':False,'status':'retrying','retry_at':(runner.time.time()+2)*1000},{'processed':True,'status':'ok','updates':0},{'processed':False}]);calls=[]
+  def api(path,payload=None):
+   calls.append(path)
+   return next(results) if path=='monitor' else {}
+  with patch.object(runner,'api',side_effect=api),patch.object(runner,'deliver',return_value=0) as delivery,patch.object(runner.time,'sleep') as sleep:
+   runner.main()
+   self.assertEqual(calls.count('monitor'),3);self.assertIn('cleanup',calls);sleep.assert_called_once();self.assertGreaterEqual(delivery.call_count,4)
 if __name__=='__main__':unittest.main(verbosity=2)

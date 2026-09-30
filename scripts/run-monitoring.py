@@ -74,12 +74,26 @@ def main():
             failures += 1
             print('Email transport failed:', type(error).__name__)
     deliver_safely()
-    for _ in range(int(os.environ.get('MONITOR_BATCH_SIZE', '40'))):
+    completed = 0
+    deadline = time.monotonic() + 20 * 60
+    while completed < int(os.environ.get('MONITOR_BATCH_SIZE', '40')) and time.monotonic() < deadline:
         result = api('monitor')
-        if not result.get('processed'):
-            break
-        print(json.dumps({key:result[key] for key in ('processed','status','updates','idle') if key in result}))
+        if result.get('processed'):
+            completed += 1
+        print(json.dumps({key:result[key] for key in ('processed','source','status','updates','idle','retry_at') if key in result}), flush=True)
         deliver_safely()
+        retry_at = result.get('retry_at')
+        if retry_at:
+            delay = max(1, retry_at / 1000 - time.time())
+            if delay > 120 or time.monotonic() + delay >= deadline:
+                break  # Longer cooldowns resume on the next scheduled run.
+            while delay > 0:
+                pause = min(60, delay)
+                time.sleep(pause)
+                delay -= pause
+                deliver_safely()
+        elif not result.get('processed'):
+            break
     api('cleanup')
     if failures:
         raise RuntimeError(f'{failures} email delivery failures; source monitoring completed.')

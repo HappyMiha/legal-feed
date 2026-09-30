@@ -1,4 +1,5 @@
 import { HttpError } from './errors';
+export {limitedText,textContent} from './source-text';
 export function safeUrl(value:string) {
  const u=new URL(value);
  const host=u.hostname.toLowerCase();
@@ -21,11 +22,6 @@ export async function publicFetch(value:string):Promise<Response> {
  }
  throw Error('Too many source redirects.');
 }
-export async function limitedText(response:Response,max=2_000_000){
- const reader=response.body?.getReader();if(!reader)return '';let size=0,result='';const decoder=new TextDecoder();
- while(true){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>max){await reader.cancel();throw Error('Source document too large.');}result+=decoder.decode(value,{stream:true});}return result+decoder.decode();
-}
-export function textContent(html:string){return html.replace(/<(script|style|nav|footer|header)\b[^>]*>[\s\S]*?<\/\1>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'").replace(/&#(\d+);/g,(_,n)=>String.fromCodePoint(Number(n))).replace(/\s+/g,' ').trim();}
 export async function hash(value:string){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));return Array.from(new Uint8Array(b),v=>v.toString(16).padStart(2,'0')).join('');}
 export async function passwordHash(password:string,salt:string){const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);const b=await crypto.subtle.deriveBits({name:'PBKDF2',salt:new TextEncoder().encode(salt),iterations:100000,hash:'SHA-256'},key,256);return Array.from(new Uint8Array(b),v=>v.toString(16).padStart(2,'0')).join('');}
 export function equalSecret(a:string,b:string){if(a.length!==b.length)return false;let n=0;for(let i=0;i<a.length;i++)n|=a.charCodeAt(i)^b.charCodeAt(i);return n===0;}

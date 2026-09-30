@@ -8,7 +8,9 @@ class EmailAuthentication(unittest.TestCase):
   email,cookie,owner=signup();self.owners.append(owner);return email,cookie,owner
  def test_01_public_registration_and_removed_chatgpt_auth(self):
   with urllib.request.urlopen(BASE+'/') as response:
-   self.assertEqual(response.status,200);html=response.read().decode();self.assertIn('Create your account',html);self.assertNotIn('signin-with-chatgpt',html);self.assertIn('noindex',html)
+   self.assertEqual(response.status,200);html=response.read().decode();self.assertIn('LEGAL FEED',html);self.assertIn('href="/register"',html);self.assertIn('href="/login"',html);self.assertNotIn('signin-with-chatgpt',html);self.assertIn('noindex',html)
+  with urllib.request.urlopen(BASE+'/register') as response:self.assertIn('Create your account',response.read().decode())
+  with urllib.request.urlopen(BASE+'/updates/private-record') as response:self.assertIn('/login?return_to=',response.url)
   self.assertEqual(request('state',cookie='__sites_local_auth=1',headers={'oai-authenticated-user-id':'fake','oai-authenticated-user-email':'test@example.test'})[0],401)
   self.assertEqual(request('auth/register','POST',{},origin=False)[0],403)
  def test_02_verification_and_replay(self):
@@ -27,6 +29,12 @@ class EmailAuthentication(unittest.TestCase):
  def test_03_sessions_and_isolation(self):
   email,cookie,owner=self.account();_,other,other_owner=self.account()
   self.assertNotEqual(owner,other_owner)
+  profile={'id':str(uuid.uuid4()),'name':'Private profile','status':'paused','topics':[{'id':'test-topic','title':'Private legal topic','description':'Only for this account','origin':'user','selected':True}],'sources':[{'id':'fedlex','name':'Fedlex','section':'government_federal','type':'law','active':True}],'delivery':{'frequency':'weekly','channels':['email'],'relevance_threshold':'high'},'created_at':'','updated_at':''}
+  self.assertEqual(request('profiles','POST',profile,cookie=cookie)[0],201)
+  self.assertIn(profile['id'],[p['id'] for p in request('state',cookie=cookie)[1]['profiles']])
+  self.assertEqual(request('state',cookie=other)[1]['profiles'],[])
+  self.assertEqual(request('account/export',cookie=other)[1]['profiles'],[])
+  self.assertEqual(request('profiles/'+profile['id'],'DELETE',{'confirmation':profile['name']},cookie=other)[0],404)
   code,_,headers=request('auth/login','POST',{'email':email.upper(),'password':PASSWORD})
   self.assertEqual(code,200);self.assertIn('HttpOnly',headers['Set-Cookie']);self.assertIn('SameSite=Lax',headers['Set-Cookie'])
   new_cookie=headers['Set-Cookie'].split(';')[0]

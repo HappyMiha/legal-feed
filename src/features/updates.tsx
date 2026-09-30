@@ -7,6 +7,7 @@ import {
   Check,
   Copy,
   FileDown,
+  FileText,
   MessageSquare,
   Search,
   ThumbsDown,
@@ -429,13 +430,16 @@ export function UpdateDetail({
             <FileDown />
             Export PDF
           </Button>
+          <div className="source-actions">
+          {u.url&&<Button variant="ghost" asChild><a href={u.url} target="_blank" rel="noopener noreferrer">Original source<ArrowUpRight /></a></Button>}
           <Button
             variant="ghost"
             onClick={() => actions.go(`/source-records/${id}`)}
           >
-            Original source
-            <ArrowUpRight />
+            <FileText />
+            Saved copy
           </Button>
+          </div>
         </aside>
       </div>
       <Modal
@@ -538,30 +542,30 @@ export function SourceView({
         Back to update
       </Button>
       {error ? (
-        <h1>Source record unavailable</h1>
+        <h1>Saved copy unavailable</h1>
       ) : record ? (
         <>
-          <p className="eyebrow">Source record</p>
+          <p className="eyebrow">Saved copy</p>
           <h1>{record.title}</h1>
           <dl>
             <dt>Source</dt>
             <dd>{record.update.source_name}</dd>
-            <dt>Published</dt>
+            <dt>{record.update.date_kind==='discovered'?'Discovered':'Published'}</dt>
             <dd>{formatDate(record.update.published_at)}</dd>
             <dt>Legal basis</dt>
             <dd>{record.update.legal_basis}</dd>
           </dl>
           {record.update.url && <p><a href={record.update.url} target="_blank" rel="noopener noreferrer">Open original publication ↗</a></p>}
           <section>
-            <h2>Source text</h2>
-            <p>{record.body}</p>
+            <h2>Saved source text</h2>
+            {record.body.split(/\n{2,}/).map((paragraph,index)=><p key={index}>{paragraph}</p>)}
           </section>
           {config.summaryNotice && (
             <p className="scenario-note">{record.disclosure}</p>
           )}
         </>
       ) : (
-        <p role="status">Loading source record…</p>
+        <p role="status">Loading saved copy…</p>
       )}
     </div>
   );

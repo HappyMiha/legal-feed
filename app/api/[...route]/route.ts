@@ -8,6 +8,8 @@ import { profileSchema, accountSchema, patchSchema } from '@/src/server/validati
 import { sources, cantonSources, canonicalSource } from '@/src/server/catalog';
 import {requestEmailChange,verifyEmail} from '@/src/server/email-verification';
 import { suggestTopics } from '@/src/server/ai';
+import {AnalysisDeferred} from '@/src/server/ai-provider';
+import {repairSourceCopies} from '@/src/server/repair-sources';
 import { safeUrl, equalSecret } from '@/src/server/security';
 import { monitorNext } from '@/src/server/monitor';
 import { claimDeliveries, acknowledgeDelivery } from '@/src/server/delivery';
@@ -22,6 +24,7 @@ async function handle(request:Request){try{
   if(!runtime().CRON_SECRET||!equalSecret(request.headers.get('authorization')||'',`Bearer ${runtime().CRON_SECRET}`))throw new HttpError(401,'Unauthorized.');
   if(method!=='POST')throw new HttpError(405,'POST required.');
   if(path[1]==='auth-health'){await sendSmtp();return json({smtp:'connected'});}
+  if(path[1]==='repair-sources')return json(await repairSourceCopies());
   if(path[1]==='monitor')return json(await monitorNext());
   if(path[1]==='deliveries')return json(await claimDeliveries());
   if(path[1]==='ack'){const input=z.object({id:z.string(),success:z.boolean(),error:z.string().optional(),unattempted:z.boolean().optional()}).parse(await body(request));await acknowledgeDelivery(input.id,input.success,input.error,input.unattempted);return json({ok:true});}
@@ -76,5 +79,5 @@ async function handle(request:Request){try{
   if(method==='DELETE'){await rateLimit(owner,'password',10);const input=z.object({password:z.string().max(256),confirmation:z.literal('DELETE')}).parse(await body(request));const row=await db.prepare('SELECT password_hash,password_salt FROM accounts WHERE id=?').bind(owner).first<{password_hash:string|null;password_salt:string|null}>();if(!row?.password_hash||!await matchesPassword(input.password,row.password_salt,row.password_hash))throw new HttpError(400,'The password is incorrect.');const removed=await db.prepare('DELETE FROM accounts WHERE id=? AND password_hash=? RETURNING id').bind(owner,row.password_hash).first();if(!removed)throw new HttpError(409,'Your password changed. Sign in and try again.');const response=json({ok:true});response.headers.set('set-cookie',authCookie(url.href));return response;}
  }
  throw new HttpError(404,'Not found.');
-}catch(error){if(error instanceof z.ZodError)return json({error:error.issues[0]?.message||'Invalid input.'},400);if(error instanceof HttpError)return json({error:error.message},error.status);console.error('Legal Feed request failed',error instanceof Error?error.message:'unknown');return json({error:'The service could not complete this request. Please try again.'},500);}}
+}catch(error){if(error instanceof z.ZodError)return json({error:error.issues[0]?.message||'Invalid input.'},400);if(error instanceof AnalysisDeferred){const response=json({error:error.message,retry_at:error.retryAt},503);response.headers.set('retry-after',String(Math.max(1,Math.ceil((error.retryAt-Date.now())/1000))));return response;}if(error instanceof HttpError)return json({error:error.message},error.status);console.error('Legal Feed request failed',error instanceof Error?error.message:'unknown');return json({error:'The service could not complete this request. Please try again.'},500);}}
 export const GET=handle;export const POST=handle;export const PUT=handle;export const PATCH=handle;export const DELETE=handle;
