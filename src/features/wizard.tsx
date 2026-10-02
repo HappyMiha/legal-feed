@@ -1,4 +1,6 @@
 "use client";
+import {useI18n} from '../i18n/client';
+
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -71,6 +73,8 @@ export function Wizard({
   state: AppState;
   actions: Actions;
 }) {
+ const {t:tr,locale}=useI18n();
+
   const draft = state.draft;
   const [busy, setBusy] = useState(false);
   const [topicBusy, setTopicBusy] = useState(false);
@@ -81,7 +85,7 @@ export function Wizard({
       stateStore.write({ ...stateStore.read(), draft: next });
     } catch {
       toast.error(
-        "Could not save your draft. Please try again.",
+        tr("Could not save your draft. Please try again."),
       );
     }
   };
@@ -96,13 +100,12 @@ export function Wizard({
         </span>
         <h1>
           {draft?.editing_id
-            ? "Your changes are saved"
-            : "Your monitoring profile is live"}
+            ? tr("Your changes are saved")
+            : tr("Your monitoring profile is live")}
         </h1>
         <p>{activated.name}</p>
         <div className="actions">
-          <Button onClick={() => actions.go(`/feed?profile=${activated.id}`)}>
-            Go to feed <ArrowRight />
+          <Button onClick={() => actions.go(`/feed?profile=${activated.id}`)}> {tr("Go to feed")} <ArrowRight />
           </Button>
           <Button
             variant="outline"
@@ -110,20 +113,16 @@ export function Wizard({
               setActivated(null);
               actions.begin();
             }}
-          >
-            Create another profile
-          </Button>
+          > {tr("Create another profile")} </Button>
         </div>
       </div>
     );
   if (!draft)
     return (
       <div className="empty-panel">
-        <h1>Create monitoring profile</h1>
-        <Button onClick={actions.begin}>Start profile</Button>
-        <Button variant="outline" onClick={() => actions.go("/feed")}>
-          Go to feed
-        </Button>
+        <h1>{tr("Create monitoring profile")}</h1>
+        <Button onClick={actions.begin}>{tr("Start profile")}</Button>
+        <Button variant="outline" onClick={() => actions.go("/feed")}> {tr("Go to feed")} </Button>
       </div>
     );
   const p = draft.profile;
@@ -156,7 +155,7 @@ export function Wizard({
       } else setActivated(result);
     } catch (error) {
       toast.error(
-        error instanceof Error?error.message:"Could not activate monitoring. Check the profile and try again.",
+        error instanceof Error?tr(error.message):tr("Could not activate monitoring. Check the profile and try again."),
       );
       if(!draft.editing_id){await stateStore.refresh().catch(()=>{});const current=stateStore.read();if(current.profiles.length>=(current.feed_quota?.limit??3))actions.go('/feed-limit');}
     } finally {
@@ -170,30 +169,30 @@ export function Wizard({
         <div>
           <p className="eyebrow">
             {draft.editing_id
-              ? "Edit monitoring profile"
-              : "Create monitoring profile"}
+              ? tr("Edit monitoring profile")
+              : tr("Create monitoring profile")}
           </p>
           <h1>
             {
-              [
+              tr([
                 "Define topics",
                 "Select sources",
                 "Choose delivery",
                 "Review and activate",
-              ][index]
+              ][index])
             }
           </h1>
         </div>
-        <span className="step-count">Step {index + 1} of 4</span>
+        <span className="step-count">{tr("Step")} {index + 1} {tr("of 4")}</span>
       </div>
-      <ol className="stepper" aria-label="Profile setup progress">
+      <ol className="stepper" aria-label={tr("Profile setup progress")}>
         {["Topics", "Sources", "Delivery", "Review"].map((label, i) => (
           <li
             key={label}
             className={i === index ? "current" : i < index ? "complete" : ""}
           >
             <span>{i < index ? <Check /> : i + 1}</span>
-            {label}
+            {tr(label)}
           </li>
         ))}
       </ol>
@@ -210,9 +209,7 @@ export function Wizard({
         {index === 2 && <Delivery profile={p} patch={patch} />}
         {index === 3 && (
           <>
-            <label className="field">
-              Profile name
-              <Input
+            <label className="field"> {tr("Profile name")} <Input
                 value={p.name}
                 onChange={(e) => patch({ name: e.target.value })}
                 autoComplete="off"
@@ -224,15 +221,13 @@ export function Wizard({
               {["Topics", "Sources", "Delivery"].map((label, i) => (
                 <section className="panel" key={label}>
                   <div className="section-heading">
-                    <h2>{label}</h2>
+                    <h2>{tr(label)}</h2>
                     <Button
                       variant="ghost"
                       onClick={() => actions.go(`/monitoring/new/${steps[i]}`)}
-                      aria-label={`Edit ${label.toLowerCase()}`}
+                      aria-label={tr("Edit {0}", {0:tr(label)})}
                     >
-                      <Pencil />
-                      Edit
-                    </Button>
+                      <Pencil /> {tr("Edit")} </Button>
                   </div>
                   {i === 0 ? (
                     <ul>
@@ -244,25 +239,24 @@ export function Wizard({
                     </ul>
                   ) : i === 1 ? (
                     <>
-                      <p>{sources} active sources</p>
+                      <p>{sources} {tr("active sources")}</p>
                       <p className="muted">
                         {p.sources
                           .filter((s) => s.active)
-                          .map((s) => s.name)
+                          .map((s) => s.section==="signal"?s.name:tr(s.name))
                           .join(" · ")}
                       </p>
                     </>
                   ) : (
                     <p>
                       {
-                        frequencies.find(
+                        tr(frequencies.find(
                           (f) => f[0] === p.delivery.frequency,
-                        )?.[1]
-                      }{" "}
-                      · Email ·{" "}
+                        )?.[1]||"")
+                      }{" "} {tr("· Email ·")}{" "}
                       {p.delivery.relevance_threshold === "high"
-                        ? "Only high relevance"
-                        : "All matches"}
+                        ? tr("Only high relevance")
+                        : tr("All matches")}
                     </p>
                   )}
                 </section>
@@ -283,13 +277,13 @@ export function Wizard({
           }
         >
           <ArrowLeft />
-          {index === 0 ? "Cancel" : "Back"}
+          {index === 0 ? tr("Cancel") : tr("Back")}
         </Button>
         <span className="muted">
           {index === 0
-            ? `${count} topics selected`
+            ? tr("{0} topics selected", {0:count})
             : index === 1
-              ? `${sources} sources active`
+              ? tr("{0} sources active", {0:sources})
               : ""}
         </span>
         <Button
@@ -305,12 +299,12 @@ export function Wizard({
           }}
         >
           {busy
-            ? "Saving…"
+            ? tr("Saving…")
             : index === 3
               ? draft.editing_id
-                ? "Save changes"
-                : "Activate monitoring"
-              : "Continue"}
+                ? tr("Save changes")
+                : tr("Activate monitoring")
+              : tr("Continue")}
           <ArrowRight />
         </Button>
       </footer>
@@ -328,6 +322,8 @@ function Topics({
   patch: (p: Partial<MonitoringProfile>) => void;
   onBusy: (busy: boolean) => void;
 }) {
+ const {t:tr,locale}=useI18n();
+
   const [generating, setGenerating] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -365,7 +361,7 @@ function Topics({
         },
       });
     } catch {
-      toast.error("Could not suggest topics. Please try again.");
+      toast.error(tr("Could not suggest topics. Please try again."));
     } finally {
       setGenerating(false);
       onBusy(false);
@@ -386,9 +382,7 @@ function Topics({
           void generate();
         }}
       >
-        <label className="field">
-          What should we monitor?
-          <Input
+        <label className="field"> {tr("What should we monitor?")} <Input
             value={draft.input}
             onChange={(e) => save({ ...draft, input: e.target.value })}
             disabled={generating}
@@ -397,20 +391,16 @@ function Topics({
         </label>
         <Button type="submit" disabled={generating || !draft.input.trim()}>
           {draft.generated ? <RefreshCw /> : null}
-          {draft.generated ? "Regenerate" : "Suggest legal topics"}
+          {draft.generated ? tr("Regenerate") : tr("Suggest legal topics")}
         </Button>
       </form>
       {generating ? (
         <div className="topic-processing" role="status">
-          <span className="lens-progress" />
-          Turning your keywords into legal topics
-        </div>
+          <span className="lens-progress" /> {tr("Turning your keywords into legal topics")} </div>
       ) : (
         <>
           {draft.generated && !draft.profile.topics.length && (
-            <p className="empty-inline">
-              No topics found. Add your own topic to continue.
-            </p>
+            <p className="empty-inline"> {tr("No topics found. Add your own topic to continue.")} </p>
           )}
           <div className="topic-grid">
             {draft.profile.topics.map((t) => (
@@ -423,7 +413,7 @@ function Topics({
                   onCheckedChange={(checked) =>
                     change(t.id, { selected: checked === true })
                   }
-                  aria-label={`Select ${t.title}`}
+                  aria-label={tr("Select {0}",{0:t.title})}
                 />
                 <div className="topic-copy">
                   {editing === t.id ? (
@@ -437,22 +427,18 @@ function Topics({
                       }}
                     >
                       <Input
-                        aria-label="Topic title"
+                        aria-label={tr("Topic title")}
                         value={editTitle}
                         onChange={(e) => setEditTitle(e.target.value)}
                         autoFocus
                       />
                       <div className="actions">
-                        <Button type="submit" disabled={!editTitle.trim()}>
-                          Save title
-                        </Button>
+                        <Button type="submit" disabled={!editTitle.trim()}> {tr("Save title")} </Button>
                         <Button
                           variant="ghost"
                           type="button"
                           onClick={() => setEditing(null)}
-                        >
-                          Cancel
-                        </Button>
+                        > {tr("Cancel")} </Button>
                       </div>
                     </form>
                   ) : (
@@ -465,18 +451,16 @@ function Topics({
                   <div className="topic-actions">
                     <Button
                       variant="ghost"
-                      aria-label={`Edit ${t.title}`}
+                      aria-label={tr("Edit {0}", {0:t.title})}
                       onClick={() => {
                         setEditing(t.id);
                         setEditTitle(t.title);
                       }}
                     >
-                      <Pencil />
-                      Edit
-                    </Button>
+                      <Pencil /> {tr("Edit")} </Button>
                     <Button
                       variant="ghost"
-                      aria-label={`Delete ${t.title}`}
+                      aria-label={tr("Delete {0}", {0:t.title})}
                       onClick={() =>
                         patch({
                           topics: draft.profile.topics.filter(
@@ -485,9 +469,7 @@ function Topics({
                         })
                       }
                     >
-                      <Trash2 />
-                      Delete
-                    </Button>
+                      <Trash2 /> {tr("Delete")} </Button>
                   </div>
                 </div>
               </article>
@@ -496,9 +478,7 @@ function Topics({
         </>
       )}
       {draft.generated && (
-        <label className="field missing-field">
-          What’s missing?
-          <Input
+        <label className="field missing-field"> {tr("What’s missing?")} <Input
             value={draft.missing}
             onChange={(e) => save({ ...draft, missing: e.target.value })}
             placeholder=""
@@ -506,9 +486,7 @@ function Topics({
         </label>
       )}
       <Button variant="outline" onClick={() => setCustom(!custom)}>
-        <Plus />
-        Add my own topic
-      </Button>
+        <Plus /> {tr("Add my own topic")} </Button>
       {custom && (
         <form
           className="panel custom-topic"
@@ -534,34 +512,26 @@ function Topics({
             setCustom(false);
           }}
         >
-          <label className="field">
-            Topic title
-            <Input
+          <label className="field"> {tr("Topic title")} <Input
               value={own}
               onChange={(e) => setOwn(e.target.value)}
               autoFocus
             />
           </label>
-          <label className="field">
-            Description (optional)
-            <Textarea
+          <label className="field"> {tr("Description (optional)")} <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
           </label>
-          <label className="field">
-            Legal basis (optional)
-            <Input value={basis} onChange={(e) => setBasis(e.target.value)} />
+          <label className="field"> {tr("Legal basis (optional)")} <Input value={basis} onChange={(e) => setBasis(e.target.value)} />
           </label>
           <div className="actions">
-            <Button disabled={!own.trim()}>Add topic</Button>
+            <Button disabled={!own.trim()}>{tr("Add topic")}</Button>
             <Button
               type="button"
               variant="ghost"
               onClick={() => setCustom(false)}
-            >
-              Cancel
-            </Button>
+            > {tr("Cancel")} </Button>
           </div>
         </form>
       )}
@@ -577,6 +547,8 @@ function Sources({
   patch: (p: Partial<MonitoringProfile>) => void;
   actions: Actions;
 }) {
+ const {t:tr,locale}=useI18n();
+
   const [signal, setSignal] = useState(false);
   const [type, setType] = useState("linkedin-page");
   const [url, setUrl] = useState("");
@@ -629,16 +601,15 @@ function Sources({
           return (
             <section className="panel" key={key}>
               <div className="section-heading">
-                <h2>{title}</h2>
+                <h2>{tr(title)}</h2>
                 <span className="muted">
-                  {items.filter((s) => s.active).length} of {items.length}{" "}
-                  active
+                  {tr('{0} of {1} active',{0:items.filter(s=>s.active).length,1:items.length})}
                 </span>
               </div>
               {key === "government_cantonal" && (
                 <div className="canton-control">
                   <SelectField
-                    label="Canton"
+                    label={tr("Canton")}
                     value={canton}
                     onChange={addCanton}
                     options={cantons.map((c) => [c, c])}
@@ -648,7 +619,7 @@ function Sources({
                       <Button
                         key={name}
                         variant="outline"
-                        aria-label={`Remove canton ${name}`}
+                        aria-label={tr("Remove canton {0}", {0:name})}
                         onClick={() => {
                           patch({
                             sources: profile.sources.filter(
@@ -663,7 +634,7 @@ function Sources({
                             );
                         }}
                       >
-                        {name}
+                        {tr(name||"")}
                         <Trash2 />
                       </Button>
                     ))}
@@ -673,7 +644,7 @@ function Sources({
               <div className="source-grid">
                 {items.map((s) => (
                   <label key={s.id} className="source-row">
-                    <span>{s.name}</span>
+                    <span>{tr(s.name)}</span>
                     <Switch
                       checked={s.active}
                       onCheckedChange={(active) =>
@@ -683,7 +654,7 @@ function Sources({
                           ),
                         })
                       }
-                      aria-label={s.name}
+                      aria-label={tr(s.name)}
                     />
                   </label>
                 ))}
@@ -694,22 +665,13 @@ function Sources({
       </div>
       <section className="panel signals">
         <div className="section-heading">
-          <h2>
-            Signals{" "}
+          <h2> {tr("Signals")}{" "}
             <span className="muted">
-              {
-                profile.sources.filter(
-                  (s) => s.section === "signal" && s.active,
-                ).length
-              }{" "}
-              of {profile.sources.filter((s) => s.section === "signal").length}{" "}
-              active
+              {tr('{0} of {1} active',{0:profile.sources.filter(s=>s.section==='signal'&&s.active).length,1:profile.sources.filter(s=>s.section==='signal').length})}
             </span>
           </h2>
           <Button variant="outline" onClick={() => setSignal(!signal)}>
-            <Plus />
-            Add signal
-          </Button>
+            <Plus /> {tr("Add signal")} </Button>
         </div>
         {profile.sources
           .filter((s) => s.section === "signal")
@@ -719,7 +681,7 @@ function Sources({
                 <strong>{s.name}</strong>
                 <p className="muted">{s.url}</p>
               </div>
-              <span className="badge">{s.active ? s.type === "linkedin" ? "public posts" : "queued" : "paused"}</span>
+              <span className="badge">{s.active ? s.type === "linkedin" ? tr("public posts") : tr("queued") : tr("paused")}</span>
               <Switch
                 checked={s.active}
                 onCheckedChange={(active) =>
@@ -729,11 +691,11 @@ function Sources({
                     ),
                   })
                 }
-                aria-label={`Activate signal ${s.name}`}
+                aria-label={tr("Activate signal {0}", {0:s.name})}
               />
               <Button
                 variant="ghost"
-                aria-label={`Remove ${s.name}`}
+                aria-label={tr("Remove {0}", {0:s.name})}
                 onClick={() =>
                   patch({
                     sources: profile.sources.filter((x) => x.id !== s.id),
@@ -753,7 +715,7 @@ function Sources({
             }}
           >
             <SelectField
-              label="Type"
+              label={tr("Type")}
               value={type}
               onChange={setType}
               options={[
@@ -776,24 +738,20 @@ function Sources({
                 }}
               />
             </label>
-            <label className="field">
-              Label (optional)
-              <Input value={label} onChange={(e) => setLabel(e.target.value)} />
+            <label className="field"> {tr("Label (optional)")} <Input value={label} onChange={(e) => setLabel(e.target.value)} />
             </label>
             {error && (
               <p role="alert" className="error">
-                {error}
+                {tr(error)}
               </p>
             )}
             <div className="actions">
-              <Button>Add signal</Button>
+              <Button>{tr("Add signal")}</Button>
               <Button
                 type="button"
                 variant="ghost"
                 onClick={() => setSignal(false)}
-              >
-                Cancel
-              </Button>
+              > {tr("Cancel")} </Button>
             </div>
           </form>
         )}
@@ -808,6 +766,8 @@ function Delivery({
   profile: MonitoringProfile;
   patch: (p: Partial<MonitoringProfile>) => void;
 }) {
+ const {t:tr,locale}=useI18n();
+
   const d = profile.delivery;
   const [preview, setPreview] = useState<Update | null>(null);
   useEffect(() => {
@@ -818,7 +778,7 @@ function Delivery({
       <div className="delivery-layout">
         <section className="delivery-settings">
           <Choices
-            label="Frequency"
+            label={tr("Frequency")}
             value={d.frequency}
             onChange={(frequency) =>
               patch({
@@ -828,22 +788,16 @@ function Delivery({
             options={frequencies}
           />
           <fieldset className="field">
-            <legend>Channel</legend>
+            <legend>{tr("Channel")}</legend>
             <div className="choice-group">
               <label className="choice selected">
-                <Checkbox checked disabled />
-                Email
-              </label>
-              <button className="choice unavailable" disabled>
-                Teams — Coming soon
-              </button>
-              <button className="choice unavailable" disabled>
-                Slack — Coming soon
-              </button>
+                <Checkbox checked disabled /> {tr("Email")} </label>
+              <button className="choice unavailable" disabled> {tr("Teams — Coming soon")} </button>
+              <button className="choice unavailable" disabled> {tr("Slack — Coming soon")} </button>
             </div>
           </fieldset>
           <Choices
-            label="Relevance"
+            label={tr("Relevance")}
             value={d.relevance_threshold}
             onChange={(v) =>
               patch({
@@ -860,32 +814,31 @@ function Delivery({
           <p className="eyebrow">
             <Mail />{" "}
             {d.frequency === "weekly"
-              ? "Weekly digest preview"
-              : "Instant alert preview"}
+              ? tr("Weekly digest preview")
+              : tr("Instant alert preview")}
           </p>
-          <div className="preview-routing">
-            Email · {frequencies.find((f) => f[0] === d.frequency)?.[1]}
+          <div className="preview-routing"> {tr("Email ·")} {tr(frequencies.find((f) => f[0] === d.frequency)?.[1]||"")}
           </div>
           <p className="muted">
             {d.relevance_threshold === "high"
-              ? "Only high relevance"
-              : "All matches"}
-            {d.frequency === "both" ? " · Weekly digest on Monday, 07:00" : ""}
+              ? tr("Only high relevance")
+              : tr("All matches")}
+            {d.frequency === "both" ? " "+tr("· Weekly digest on Monday, 07:00") : ""}
           </p>
           <hr />
           {preview && (
             <>
-              <span className={`relevance ${preview.relevance}`}>{preview.relevance === "high" ? "High" : "Medium"} relevance</span>
+              <span className={`relevance ${preview.relevance}`}>{tr(preview.relevance==="high"?"High relevance":"Medium relevance")}</span>
               <h2>{preview.headline}</h2>
               <p>{preview.why_it_matters}</p>
-              <p className="muted">{preview.source_name} · {preview.published_at}</p>
+              <p className="muted">{preview.source_section==="signal"?preview.source_name:tr(preview.source_name)} · {preview.published_at}</p>
             </>
           )}
-          {!preview && <p>No matching update to preview.</p>}
+          {!preview && <p>{tr("No matching update to preview.")}</p>}
         </aside>
       </div>
       <details className="json-disclosure">
-        <summary>View as JSON</summary>
+        <summary>{tr("View as JSON")}</summary>
         <pre>{JSON.stringify(profile, null, 2)}</pre>
       </details>
     </>

@@ -1,8 +1,9 @@
+import {normalizeLocale,translate,locales,type Locale} from '../i18n/core';
 import {z} from 'zod';
 import {database,runtime,HttpError,rateLimit} from './runtime';
 import {hash} from './security';
 import {randomToken,createSession,logout,getSession,loginPasswordHash,matchesPassword,safeReturnTo} from './auth-session';
-import {defaultAccount} from './store';
+import {defaultAccount,getAccount} from './store';
 import {sendAuthMail} from './auth-mail';
 import {verifyEmail} from './email-verification';
 
@@ -15,11 +16,12 @@ type Token={kind:string;email:string;owner_id:string|null;data:string};
 async function readBody(request:Request){const text=await request.text();if(text.length>10000)throw new HttpError(413,'Request too large.');try{return JSON.parse(text)}catch{throw new HttpError(400,'Invalid request.');}}
 const identity=(email:string)=>database().prepare('SELECT owner_id,email FROM auth_identities WHERE email=?').bind(email).first<Identity>();
 async function legacyOwner(email:string){const rows=await database().prepare("SELECT a.id FROM accounts a LEFT JOIN auth_identities i ON i.owner_id=a.id WHERE lower(json_extract(a.data,'$.email'))=? AND i.owner_id IS NULL AND a.id NOT LIKE 'guest:%' LIMIT 2").bind(email).all<{id:string}>();return rows.results.length===1?rows.results[0].id:null;}
-async function issueToken(kind:'signup'|'reset',email:string,owner:string|null,data:unknown){
+async function issueToken(kind:'signup'|'reset',email:string,owner:string|null,data:unknown,locale:Locale='en'){
+ const tr=(key:string)=>translate(locale,key);
  const token=randomToken(),tokenHash=await hash(token),expires=Date.now()+30*60000;
  await database().prepare('INSERT INTO auth_tokens(token_hash,kind,email,owner_id,data,expires_at) VALUES(?,?,?,?,?,?)').bind(tokenHash,kind,email,owner,JSON.stringify(data),expires).run();
- const page=kind==='signup'?'verify-email':'reset-password',url=`${runtime().SITE_URL}/${page}#token=${token}`;
- await sendAuthMail(tokenHash,email,kind==='signup'?'Confirm your Legal Feed account':'Reset your Legal Feed password',`${kind==='signup'?'Confirm your email address to finish creating your Legal Feed account.':'Choose a new password for your Legal Feed account.'}\n\n${url}\n\nThis link expires in 30 minutes and can be used once. If you did not request it, ignore this email.`,expires);
+ const page=kind==='signup'?'verify-email':'reset-password',url=`${runtime().SITE_URL}/${page}?lang=${locale}#token=${token}`;
+ await sendAuthMail(tokenHash,email,tr(kind==='signup'?'Confirm your Legal Feed account':'Reset your Legal Feed password'),`${tr(kind==='signup'?'Confirm your email address to finish creating your Legal Feed account.':'Choose a new password for your Legal Feed account.')}\n\n${url}\n\n${tr('This link expires in 30 minutes and can be used once. If you did not request it, ignore this email.')}`,expires);
 }
 async function consumeToken(token:unknown,kind:string){if(typeof token!=='string'||!/^[a-f0-9]{64}$/.test(token))throw new HttpError(400,'This link is invalid or expired.');const row=await database().prepare('DELETE FROM auth_tokens WHERE token_hash=? AND kind=? AND expires_at>? RETURNING kind,email,owner_id,data').bind(await hash(token),kind,Date.now()).first<Token>();if(!row)throw new HttpError(400,'This link has expired or has already been used. Request a new one.');return row;}
 async function throttle(request:Request,scope:string,email?:string){await rateLimit('auth-ip',await hash((request.headers.get('cf-connecting-ip')||'local')+':'+scope),40);if(email)await rateLimit('auth-email',await hash(email+':'+scope),scope==='login'?15:5);}
@@ -30,10 +32,10 @@ export async function handleAuth(request:Request,path:string[]){
   if(request.headers.get('origin')!==url.origin)throw new HttpError(403,'Request origin is not allowed.');
   const data=await readBody(request),db=database();
   if(action==='register'){
-   const input=z.object({name:z.string().trim().min(1).max(120),email:emailSchema,password:passwordSchema,returnTo:z.string().optional()}).parse(data);
+   const input=z.object({name:z.string().trim().min(1).max(120),email:emailSchema,password:passwordSchema,returnTo:z.string().optional(),locale:z.enum(locales).optional()}).parse(data);
    await throttle(request,'register',input.email);
    const salt=randomToken(),password=await loginPasswordHash(input.password,salt);
-   if(!await identity(input.email))await issueToken('signup',input.email,null,{name:input.name,password,salt,returnTo:safeReturnTo(input.returnTo||null)});
+   if(!await identity(input.email))await issueToken('signup',input.email,null,{name:input.name,password,salt,returnTo:safeReturnTo(input.returnTo||null),locale:normalizeLocale(input.locale)},normalizeLocale(input.locale));
    return json(generic,202);
   }
   if(action==='login'){
@@ -47,17 +49,17 @@ export async function handleAuth(request:Request,path:string[]){
   if(action==='forgot-password'){
    const {email}=z.object({email:emailSchema}).parse(data);await throttle(request,'reset',email);
    const owner=(await identity(email))?.owner_id||await legacyOwner(email);
-   if(owner)await issueToken('reset',email,owner,{});
+   if(owner)await issueToken('reset',email,owner,{},normalizeLocale((await getAccount(owner)).locale));
    return json({ok:true,message:'If this email has an account, a password reset link will arrive shortly.'},202);
   }
   if(action==='verify'){
    await throttle(request,'verify');const row=await consumeToken(data.token,'signup');
    let owner=(await identity(row.email))?.owner_id;
-   const pending=JSON.parse(row.data) as {name:string;password:string;salt:string;returnTo:string};
+   const pending=JSON.parse(row.data) as {name:string;password:string;salt:string;returnTo:string;locale?:Locale};
    if(!owner){
     owner=await legacyOwner(row.email)||crypto.randomUUID();
     await db.batch([
-     db.prepare('INSERT INTO accounts(id,data,password_hash,password_salt,created_at) VALUES(?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(owner,JSON.stringify(defaultAccount(pending.name,row.email)),pending.password,pending.salt,new Date().toISOString()),
+     db.prepare('INSERT INTO accounts(id,data,password_hash,password_salt,created_at) VALUES(?,?,?,?,?) ON CONFLICT(id) DO NOTHING').bind(owner,JSON.stringify(defaultAccount(pending.name,row.email,normalizeLocale(pending.locale))),pending.password,pending.salt,new Date().toISOString()),
      db.prepare('INSERT INTO auth_identities(owner_id,email) VALUES(?,?)').bind(owner,row.email),
      db.prepare('UPDATE accounts SET password_hash=?,password_salt=? WHERE id=?').bind(pending.password,pending.salt,owner),
     ]);
@@ -97,5 +99,5 @@ export async function handleAuth(request:Request,path:string[]){
    return json({ok:true},200,await createSession(session.owner_id,url.href,password));
   }
   throw new HttpError(404,'Unknown account action.');
- }catch(error){if(error instanceof z.ZodError)return json({error:error.issues[0]?.message||'Invalid input.'},400);if(error instanceof HttpError)return json({error:error.message},error.status);console.error('Account request failed',error instanceof Error?error.name:'unknown');return json({error:'We could not complete this request. Please try again.'},500);}
+ }catch(error){if(error instanceof z.ZodError)return json({error:error.issues.find(issue=>issue.code==='custom')?.message||'Check the required fields and try again.'},400);if(error instanceof HttpError)return json({error:error.message},error.status);console.error('Account request failed',error instanceof Error?error.name:'unknown');return json({error:'We could not complete this request. Please try again.'},500);}
 }

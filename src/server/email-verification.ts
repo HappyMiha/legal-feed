@@ -1,3 +1,5 @@
+import {normalizeLocale,translate} from '../i18n/core';
+import {getAccount} from './store';
 import {database,runtime,HttpError,rateLimit} from './runtime';
 import {hash} from './security';
 import {sendSmtp} from './smtp';
@@ -5,8 +7,9 @@ export async function requestEmailChange(owner:string,email:string,expectedHash?
  const taken=await database().prepare('SELECT owner_id FROM auth_identities WHERE email=? AND owner_id<>?').bind(email.toLowerCase(),owner).first();if(taken)throw new HttpError(400,'This address is already registered.');
  await rateLimit(owner,'email-change',3);
  const token=crypto.randomUUID()+crypto.randomUUID(),id=crypto.randomUUID(),tokenHash=await hash(token);
- const url=`${runtime().SITE_URL}/verify-email#change=${encodeURIComponent(token)}`;
- const payload={id:`verify:${id}`,to:email,subject:'Verify your Legal Feed email',text:`Confirm this email address for Legal Feed notifications:\n\n${url}\n\nThe link expires in 24 hours. If you did not request this change, ignore this email.`};
+ const locale=normalizeLocale((await getAccount(owner)).locale),tr=(key:string)=>translate(locale,key);
+ const url=`${runtime().SITE_URL}/verify-email?lang=${locale}#change=${encodeURIComponent(token)}`;
+ const payload={id:`verify:${id}`,to:email,subject:tr('Verify your Legal Feed email'),text:`${tr('Confirm this email address for Legal Feed notifications:')}\n\n${url}\n\n${tr('The link expires in 24 hours. If you did not request this change, ignore this email.')}`};
  const results=await database().batch([
   database().prepare('DELETE FROM email_verifications WHERE owner_id=? AND EXISTS(SELECT 1 FROM accounts WHERE id=? AND password_hash=?)').bind(owner,owner,expectedHash||''),
   database().prepare('INSERT INTO email_verifications(id,owner_id,email,token_hash,payload,status,attempts,next_attempt,expires_at) SELECT ?,?,?,?,?,\'sending\',1,?,? WHERE EXISTS(SELECT 1 FROM accounts WHERE id=? AND password_hash=?)').bind(id,owner,email,tokenHash,JSON.stringify(payload),Date.now()+120000,Date.now()+86400000,owner,expectedHash||''),

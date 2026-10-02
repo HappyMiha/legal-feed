@@ -1,3 +1,4 @@
+import {locales,normalizeLocale,translate} from '@/src/i18n/core';
 import { z } from 'zod';
 import { getSession, authCookie, matchesPassword, cleanupAuth } from '@/src/server/auth-session';
 import {handleAuth} from '@/src/server/auth';
@@ -49,7 +50,7 @@ async function handle(request:Request){try{
  if(method==='GET'&&path[0]==='state')return json(await state(owner));
  if(method==='GET'&&path[0]==='health')return json(await health(owner));
  if(path[0]==='feed-limit-request'&&method==='POST'){await rateLimit(owner,'feed-limit-request',3);const id=await requestFeedLimit(db,owner,await body(request),runtime().SITE_URL!);await sendLimitMail(id);return json(await getFeedQuota(db,owner),201);}
- if(path[0]==='topics'&&method==='POST'){await rateLimit(owner,'topics',30);const {input}=z.object({input:z.string().trim().min(2).max(3000)}).parse(await body(request));return json(await suggestTopics(input));}
+ if(path[0]==='topics'&&method==='POST'){await rateLimit(owner,'topics',30);const {input}=z.object({input:z.string().trim().min(2).max(3000)}).parse(await body(request));return json(await suggestTopics(input,normalizeLocale((await getAccount(owner)).locale)));}
  if(path[0]==='sources'&&method==='GET')return json(path[1]==='cantons'?cantonSources(decodeURIComponent(path[2])):sources);
  if(path[0]==='preview'&&method==='POST'){const input=await body(request);const current=await state(owner);const ids=new Set((input.profile?.topics||[]).filter((t:{selected:boolean})=>t.selected).map((t:{id:string})=>t.id));return json(current.updates.find(u=>u.topic_ids.some(id=>ids.has(id)))||null);}
  if(path[0]==='profiles'){
@@ -66,7 +67,7 @@ async function handle(request:Request){try{
    await db.prepare('UPDATE profiles SET data=?,status=?,next_run=0,lease_until=0,lease_token=NULL WHERE id=? AND owner_id=?').bind(JSON.stringify(p),p.status,id,owner).run();return json(p);
   }
   if(method==='DELETE'){const {confirmation}=await body(request);if(confirmation!==existing.name)throw new HttpError(400,'Enter the exact profile name.');await db.prepare('DELETE FROM profiles WHERE id=? AND owner_id=?').bind(id,owner).run();return json({ok:true});}
-  if(method==='POST'&&path[2]==='duplicate'){await rateLimit(owner,'create-profile',20);const now=new Date().toISOString(),p:MonitoringProfile={...existing,id:crypto.randomUUID(),name:`Copy of ${existing.name}`.slice(0,120),created_at:now,updated_at:now};return json(await insertLimitedProfile(db,owner,p),201);}
+  if(method==='POST'&&path[2]==='duplicate'){await rateLimit(owner,'create-profile',20);const now=new Date().toISOString(),p:MonitoringProfile={...existing,id:crypto.randomUUID(),name:translate(normalizeLocale((await getAccount(owner)).locale),"Copy of {0}",{0:existing.name}).slice(0,120),created_at:now,updated_at:now};return json(await insertLimitedProfile(db,owner,p),201);}
   if(method==='POST'&&path[2]==='monitor'){await rateLimit(owner,'monitor',30);await retryFailedChecks(db,owner,id);return json(await monitorNext(owner,id));}
  }
  if(path[0]==='updates'){
@@ -76,6 +77,8 @@ async function handle(request:Request){try{
   if(method==='GET')return json(update);
  }
  if(path[0]==='account'){
+  if(path[1]==='language'&&method==='PUT'){const {locale}=z.object({locale:z.enum(locales)}).strict().parse(await body(request));await db.prepare('UPDATE accounts SET data=json_patch(data,?) WHERE id=?').bind(JSON.stringify({locale}),owner).run();return json({locale});}
+
   if(method==='PUT'){
    const input=await body(request),account=accountSchema.parse(input),existing=await getAccount(owner),requested=account.email.toLowerCase();account.email=requested;
    const changing=requested.toLowerCase()!==existing.email.toLowerCase();
@@ -91,5 +94,5 @@ async function handle(request:Request){try{
   if(method==='DELETE'){await rateLimit(owner,'password',10);const input=z.object({password:z.string().max(256),confirmation:z.literal('DELETE')}).parse(await body(request));const row=await db.prepare('SELECT password_hash,password_salt FROM accounts WHERE id=?').bind(owner).first<{password_hash:string|null;password_salt:string|null}>();if(!row?.password_hash||!await matchesPassword(input.password,row.password_salt,row.password_hash))throw new HttpError(400,'The password is incorrect.');const removed=await db.prepare('DELETE FROM accounts WHERE id=? AND password_hash=? RETURNING id').bind(owner,row.password_hash).first();if(!removed)throw new HttpError(409,'Your password changed. Sign in and try again.');const response=json({ok:true});response.headers.set('set-cookie',authCookie(url.href));return response;}
  }
  throw new HttpError(404,'Not found.');
-}catch(error){if(error instanceof z.ZodError)return json({error:error.issues[0]?.message||'Invalid input.'},400);if(error instanceof AnalysisDeferred){const response=json({error:error.message,retry_at:error.retryAt},503);response.headers.set('retry-after',String(Math.max(1,Math.ceil((error.retryAt-Date.now())/1000))));return response;}if(error instanceof HttpError)return json({error:error.message},error.status);console.error('Legal Feed request failed',error instanceof Error?error.message:'unknown');return json({error:'The service could not complete this request. Please try again.'},500);}}
+}catch(error){if(error instanceof z.ZodError)return json({error:error.issues.find(issue=>issue.code==='custom')?.message||'Check the required fields and try again.'},400);if(error instanceof AnalysisDeferred){const response=json({error:error.message,retry_at:error.retryAt},503);response.headers.set('retry-after',String(Math.max(1,Math.ceil((error.retryAt-Date.now())/1000))));return response;}if(error instanceof HttpError)return json({error:error.message},error.status);console.error('Legal Feed request failed',error instanceof Error?error.message:'unknown');return json({error:'The service could not complete this request. Please try again.'},500);}}
 export const GET=handle;export const POST=handle;export const PUT=handle;export const PATCH=handle;export const DELETE=handle;

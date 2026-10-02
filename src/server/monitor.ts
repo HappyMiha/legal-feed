@@ -1,3 +1,5 @@
+import {getAccount} from './store';
+import {normalizeLocale} from '../i18n/core';
 import type {MonitoringProfile} from '../domain/monitoring';
 import {database} from './runtime';
 import {collect,analyse} from './ingestion';
@@ -33,7 +35,7 @@ export async function monitorNext(owner?:string,profileId?:string){
    const processed=await db.prepare('SELECT id FROM processed_documents WHERE profile_id=?').bind(profile.id).all<{id:string}>();const seen=new Set(processed.results.map(r=>r.id));
    const remaining=articles.filter((a,i)=>!known.has(a.url)&&!seen.has(fingerprints[i]));
    const fresh=remaining.slice(0,analysisAttempts>0?1:MAX_ANALYSIS_ARTICLES);
-   const matches=await analyse(fresh,source,profile);
+   const matches=await analyse(fresh,source,profile,normalizeLocale((await getAccount(candidate.owner_id)).locale));
    analysisAttempts=0;
    const statements=[];
    for(const {update,sourceText} of matches){

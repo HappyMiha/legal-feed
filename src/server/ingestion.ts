@@ -1,3 +1,4 @@
+import {languageInstruction,type Locale} from '../i18n/core';
 import type {MonitoringProfile,Source,Update} from '../domain/monitoring';
 import {publicFetch,limitedText,textContent,safeUrl,hash} from './security';
 import {runtime,database} from './runtime';
@@ -65,11 +66,11 @@ export async function collect(source:Source,profile:MonitoringProfile):Promise<A
  }
  return search(source,profile);
 }
-export async function analyse(articles:Article[],source:Source,profile:MonitoringProfile):Promise<{update:Update;sourceText:string}[]>{
+export async function analyse(articles:Article[],source:Source,profile:MonitoringProfile,locale:Locale='en'):Promise<{update:Update;sourceText:string}[]>{
  if(!articles.length)return [];
  const topics=profile.topics.filter(t=>t.selected);
  const references=analysisTopicRefs(topics),contract=analysisContract(articles.length,references.map(reference=>reference.id));
- const result=await aiJson(ANALYSIS_SYSTEM,{profile:profile.name,topics:references.map(({id,topic:{title,description}})=>({id,title,description})),articles:articles.map((a,index)=>({index,title:a.title,date:a.date,date_kind:a.dateKind,text:a.text.slice(0,6500)}))},contract,5000,'legal_matches');
+ const result=await aiJson(ANALYSIS_SYSTEM+' '+languageInstruction(locale),{profile:profile.name,topics:references.map(({id,topic:{title,description}})=>({id,title,description})),articles:articles.map((a,index)=>({index,title:a.title,date:a.date,date_kind:a.dateKind,text:a.text.slice(0,6500)}))},contract,5000,'legal_matches');
  const output:{update:Update;sourceText:string}[]=[];
  const indices=new Set<number>();
  for(const match of result.matches){const a=articles[match.index];const selected=references.filter(reference=>match.topic_ids.includes(reference.id)).map(reference=>reference.topic);if(!a||!selected.length||match.topic_ids.some(id=>!references.some(reference=>reference.id===id))||indices.has(match.index))throw new InvalidAnalysis('references');indices.add(match.index);

@@ -1,3 +1,4 @@
+import {normalizeLocale,translate,type Values} from '../i18n/core';
 import {z} from 'zod';
 import {hash} from './security';
 import {HttpError} from './errors';
@@ -40,8 +41,11 @@ export async function requestFeedLimit(db:D1Database,owner:string,input:unknown,
  const id=crypto.randomUUID(),token=Array.from(crypto.getRandomValues(new Uint8Array(32)),v=>v.toString(16).padStart(2,'0')).join('');
  const now=Date.now(),expires=now+7*86400000,base=new URL('/feed-limit-review',siteUrl).href;
  const link=(action:string)=>`${base}#token=${token}&action=${action}`;
- const message={id:`limit:${id}`,to:'info@helveticlens.ch',subject:`Legal Feed: request for ${requested_limit} feeds`,text:
-  `Feed limit increase request\n\nAccount: ${JSON.parse(account.data).name}\nVerified email: ${account.email}\nFeeds used: ${quota.used}\nCurrent total limit: ${quota.limit}\nRequested total limit: ${requested_limit}\n\nReason supplied by the user:\n${reason}\n\nApprove ${requested_limit} total feeds:\n${link('approve')}\n\nDecline this request:\n${link('reject')}\n\nApprove a different total:\n${link('custom')}\n\nEach link opens a review page. A decision is saved only after you press its confirmation button. These private links expire in 7 days. Do not forward them.`};
+ // Review mail follows the administrator's saved language, defaulting to English.
+ const admin=await db.prepare("SELECT a.data FROM accounts a JOIN auth_identities i ON i.owner_id=a.id WHERE i.email='info@helveticlens.ch'").first<{data:string}>();
+ const locale=normalizeLocale(admin?JSON.parse(admin.data).locale:'en'),tr=(key:string,values?:Values)=>translate(locale,key,values);
+ const message={id:`limit:${id}`,to:'info@helveticlens.ch',subject:tr('Feed limit request from {0}',{0:account.email}),text:[
+ tr('Review feed limit request'),'',''+tr('Requester: {0}',{0:JSON.parse(account.data).name}),account.email,tr('Current usage: {0}',{0:quota.used}),tr('Current limit: {0} feeds',{0:quota.limit}),tr('Requested total: {0} feeds',{0:requested_limit}),'',tr('Reason: {0}',{0:reason}),'',tr('Approve {0} feeds: {1}',{0:requested_limit,1:link('approve')}),'',tr('Reject request: {0}',{0:link('reject')}),'',tr('Set another limit: {0}',{0:link('custom')}),'',tr('These private links expire in 7 days. Opening a link does not change the limit; confirm your decision on the review page.')].join('\n')};
  const row=await db.prepare(`INSERT INTO feed_limit_requests(id,owner_id,requested_limit,reason,token_hash,expires_at,created_at,mail_payload)
  SELECT ?,id,?,?,?,?,?,? FROM accounts WHERE id=? AND feed_limit<? AND (SELECT count(*) FROM profiles WHERE owner_id=accounts.id)<=?
  AND NOT EXISTS(SELECT 1 FROM feed_limit_requests WHERE owner_id=accounts.id AND status='pending')

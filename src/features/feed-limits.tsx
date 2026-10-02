@@ -1,4 +1,6 @@
 "use client";
+import {useI18n,LanguageSwitcher} from '../i18n/client';
+
 import {useEffect,useRef,useState} from 'react';
 import {Input} from '@/components/ui/input';
 import {Textarea} from '@/components/ui/textarea';
@@ -9,35 +11,39 @@ import {stateStore} from '../platform/storage';
 import type {FeedQuota,FeedLimitReview} from '../domain/monitoring';
 
 export function FeedLimitPage({quota}:{quota:FeedQuota}){
+ const {t:tr,locale}=useI18n();
+
  const minimum=Math.max(quota.limit+1,quota.used),[amount,setAmount]=useState(String(minimum)),[reason,setReason]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  useEffect(()=>setAmount(String(minimum)),[minimum]);
  const pending=quota.request?.status==='pending';
  const submit=async(e:React.FormEvent)=>{
   e.preventDefault();if(busy)return;setBusy(true);setError('');
   try{const owner=stateStore.read().account_id,result=await api<FeedQuota>('feed-limit-request','POST',{requested_limit:Number(amount),reason});if(stateStore.read().account_id===owner){stateStore.replace({...stateStore.read(),feed_quota:result});void stateStore.refresh().catch(()=>{});}setReason('');}
-  catch(err){setError(err instanceof Error?err.message:'Could not submit your request.');}
+  catch(err){setError(err instanceof Error?err.message:tr("Could not submit your request."));}
   finally{setBusy(false);}
  };
  return <div className="settings-page">
-  <div className="page-heading"><h1>Feed limit</h1></div>
-  <section className="panel"><h2>{quota.used} of {quota.limit} feeds used</h2><p className="muted">Each monitoring profile creates one feed. Active and paused profiles both count toward your limit.</p></section>
-  {quota.request&&<section className="panel" aria-live="polite"><h2>{pending?'Request pending':quota.request.status==='approved'?'Request approved':quota.request.status==='rejected'?'Request declined':'Request expired'}</h2>
-   <p>{pending?`You requested a total limit of ${quota.request.requested_limit} feeds. Your request has been submitted for review.`:quota.request.status==='approved'?`Your request was approved for a total of ${quota.request.approved_limit} feeds.`:quota.request.status==='rejected'?'Your limit has not changed. You can submit a new request with more information.':'The review link expired. You can submit a new request.'}</p>
-   <p className="muted">Requested {new Date(quota.request.created_at).toLocaleDateString()}{pending?` · Review link valid until ${new Date(quota.request.expires_at).toLocaleDateString()}`:''}</p>
+  <div className="page-heading"><h1>{tr("Feed limit")}</h1></div>
+  <section className="panel"><h2>{tr("{0} of {1} feeds used",{0:quota.used,1:quota.limit})}</h2><p className="muted">{tr("Each monitoring profile creates one feed. Active and paused profiles both count toward your limit.")}</p></section>
+  {quota.request&&<section className="panel" aria-live="polite"><h2>{pending?tr("Request pending"):quota.request.status==='approved'?tr("Request approved"):quota.request.status==='rejected'?tr("Request declined"):tr("Request expired")}</h2>
+   <p>{pending?tr("You requested a total limit of {0} feeds. Your request has been submitted for review.", {0:quota.request.requested_limit}):quota.request.status==='approved'?tr("Your request was approved for a total of {0} feeds.", {0:quota.request.approved_limit}):quota.request.status==='rejected'?tr("Your limit has not changed. You can submit a new request with more information."):tr("The review link expired. You can submit a new request.")}</p>
+   <p className="muted">{tr("Requested")} {new Date(quota.request.created_at).toLocaleDateString(locale==='en'?'en-CH':locale)}{pending?" "+tr("· Review link valid until {0}",{0:new Date(quota.request.expires_at).toLocaleDateString(locale==='en'?'en-CH':locale)}):''}</p>
    <p className="request-reason">{quota.request.reason}</p>
   </section>}
-  {!pending&&quota.limit<1000&&<section className="settings-section"><h2>Request a higher limit</h2><p className="muted">Tell us the total number of feeds you need and why. The Legal Feed team will review your request.</p>
+  {!pending&&quota.limit<1000&&<section className="settings-section"><h2>{tr("Request a higher limit")}</h2><p className="muted">{tr("Tell us the total number of feeds you need and why. The Legal Feed team will review your request.")}</p>
    <form onSubmit={submit} className="auth-form">
-    <label className="field">Requested total number of feeds<Input type="number" min={minimum} max={1000} step={1} required value={amount} onChange={e=>setAmount(e.target.value)}/><span className="muted">Total feeds after approval, including your existing feeds.</span></label>
-    <label className="field">Reason for the increase<Textarea required maxLength={2000} rows={5} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Explain which additional topics or clients you need to monitor."/></label>
-    {error&&<p role="alert" className="error">{error}</p>}
-    <Button disabled={busy||!reason.trim()}>{busy?'Submitting…':'Submit request'}</Button>
+    <label className="field">{tr("Requested total number of feeds")}<Input type="number" min={minimum} max={1000} step={1} required value={amount} onChange={e=>setAmount(e.target.value)}/><span className="muted">{tr("Total feeds after approval, including your existing feeds.")}</span></label>
+    <label className="field">{tr("Reason for the increase")}<Textarea required maxLength={2000} rows={5} value={reason} onChange={e=>setReason(e.target.value)} placeholder={tr("Explain which additional topics or clients you need to monitor.")}/></label>
+    {error&&<p role="alert" className="error">{tr(error)}</p>}
+    <Button disabled={busy||!reason.trim()}>{busy?tr("Submitting…"):tr("Submit request")}</Button>
    </form>
   </section>}
  </div>;
 }
 
 export function FeedLimitReviewPage(){
+ const {t:tr,locale}=useI18n();
+
  const initialized=useRef(false),[token,setToken]=useState(''),[review,setReview]=useState<FeedLimitReview|null>(null),[choice,setChoice]=useState('approve'),[amount,setAmount]=useState(''),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState('');
  const call=async(path:string,data:unknown)=>{const response=await fetch('/api/limit-review/'+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data),cache:'no-store'});const result=await response.json() as FeedLimitReview & {error?:string};if(!response.ok)throw Error(result.error||'The request could not be completed.');return result;};
  useEffect(()=>{if(initialized.current)return;initialized.current=true;
@@ -49,24 +55,24 @@ export function FeedLimitReviewPage(){
  const submit=async(e:React.FormEvent)=>{
   e.preventDefault();if(busy||!review)return;setBusy(true);setError('');
   try{setReview(await call('decide',choice==='reject'?{token,decision:'reject'}:{token,decision:'approve',approved_limit:choice==='custom'?Number(amount):review.requested_limit}));}
-  catch(err){setError(err instanceof Error?err.message:'Could not save the decision.');}
+  catch(err){setError(err instanceof Error?err.message:tr("Could not save the decision."));}
   finally{setBusy(false);}
  };
- const reload=async()=>{setLoading(true);setError('');try{const data=await call('read',{token});setReview(data);setAmount(value=>value||String(data.requested_limit));}catch(err){setError(err instanceof Error?err.message:'Could not load the request.');}finally{setLoading(false);}};
+ const reload=async()=>{setLoading(true);setError('');try{const data=await call('read',{token});setReview(data);setAmount(value=>value||String(data.requested_limit));}catch(err){setError(err instanceof Error?err.message:tr("Could not load the request."));}finally{setLoading(false);}};
  return <main className="auth-page"><section className="auth-card quota-review" aria-labelledby="review-title">
-  <a className="auth-brand" href="/"><BrandLockup/></a><h1 id="review-title">Review feed limit request</h1>
-  {loading&&<p role="status">Loading request…</p>}
-  {error&&<p role="alert" className="error">{error}</p>}
-  {error&&token&&<Button type="button" variant="outline" disabled={busy||loading} onClick={()=>void reload()}>Reload request</Button>}
+  <a className="auth-brand" href="/"><BrandLockup/></a><LanguageSwitcher/><h1 id="review-title">{tr("Review feed limit request")}</h1>
+  {loading&&<p role="status">{tr("Loading request…")}</p>}
+  {error&&<p role="alert" className="error">{tr(error)}</p>}
+  {error&&token&&<Button type="button" variant="outline" disabled={busy||loading} onClick={()=>void reload()}>{tr("Reload request")}</Button>}
   {review&&<>
-   <dl className="quota-details"><dt>Account</dt><dd>{review.name}</dd><dt>Verified email</dt><dd>{review.email}</dd><dt>Feeds used</dt><dd>{review.used}</dd><dt>Current total limit</dt><dd>{review.limit}</dd><dt>Requested total limit</dt><dd>{review.requested_limit}</dd></dl>
-   <h2>Reason supplied by the user</h2><p className="request-reason">{review.reason}</p>
+   <dl className="quota-details"><dt>{tr("Account")}</dt><dd>{review.name}</dd><dt>{tr("Verified email")}</dt><dd>{review.email}</dd><dt>{tr("Feeds used")}</dt><dd>{review.used}</dd><dt>{tr("Current total limit")}</dt><dd>{review.limit}</dd><dt>{tr("Requested total limit")}</dt><dd>{review.requested_limit}</dd></dl>
+   <h2>{tr("Reason supplied by the user")}</h2><p className="request-reason">{review.reason}</p>
    {review.status==='pending'?<form onSubmit={submit} className="auth-form">
-    <label className="field">Decision<select value={choice} onChange={e=>setChoice(e.target.value)}><option value="approve">Approve {review.requested_limit} total feeds</option><option value="custom">Approve a different total</option><option value="reject">Decline request</option></select></label>
-    {choice==='custom'&&<label className="field">Approved total number of feeds<Input type="number" min={Math.max(review.limit+1,review.used)} max={1000} step={1} required value={amount} onChange={e=>setAmount(e.target.value)}/></label>}
-    <p className="muted">{choice==='reject'?'The current feed limit will stay unchanged.':`The account’s total feed limit will be set to ${choice==='custom'?amount:review.requested_limit}. Existing feeds are included in this total.`}</p>
-    <Button disabled={busy} variant={choice==='reject'?'destructive':'default'}>{busy?'Saving…':choice==='reject'?'Confirm decline':'Confirm new limit'}</Button>
-   </form>:<p className="auth-message" role="status">{review.status==='approved'?`Approved. The total feed limit is now ${review.approved_limit}.`:'This request has been declined. The feed limit was not changed.'}</p>}
+    <label className="field">{tr("Decision")}<select value={choice} onChange={e=>setChoice(e.target.value)}><option value="approve">{tr("Approve {0} total feeds",{0:review.requested_limit})}</option><option value="custom">{tr("Approve a different total")}</option><option value="reject">{tr("Decline request")}</option></select></label>
+    {choice==='custom'&&<label className="field">{tr("Approved total number of feeds")}<Input type="number" min={Math.max(review.limit+1,review.used)} max={1000} step={1} required value={amount} onChange={e=>setAmount(e.target.value)}/></label>}
+    <p className="muted">{choice==='reject'?tr("The current feed limit will stay unchanged."):tr("The account’s total feed limit will be set to {0}. Existing feeds are included in this total.", {0:choice==='custom'?amount:review.requested_limit})}</p>
+    <Button disabled={busy} variant={choice==='reject'?'destructive':'default'}>{busy?tr("Saving…"):choice==='reject'?tr("Confirm decline"):tr("Confirm new limit")}</Button>
+   </form>:<p className="auth-message" role="status">{review.status==='approved'?tr("Approved. The total feed limit is now {0}.", {0:review.approved_limit}):tr("This request has been declined. The feed limit was not changed.")}</p>}
   </>}
  </section></main>;
 }

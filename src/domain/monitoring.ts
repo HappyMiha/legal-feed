@@ -82,6 +82,7 @@ export type Draft = {
   profile: MonitoringProfile;
 };
 export type Account = {
+  locale?: import("../i18n/core").Locale;
   pending_email?: string;
   name: string;
   email: string;

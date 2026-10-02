@@ -1,9 +1,10 @@
+import {normalizeLocale,type Locale} from '../i18n/core';
 import type {AppState,Account,MonitoringProfile,Update} from '../domain/monitoring';
 import {database,HttpError} from './runtime';
 import {CURRENT_CHECKS} from './monitor-maintenance';
 import {getFeedQuota} from './feed-limits';
-export function defaultAccount(name:string,email:string):Account{return {name,email,firm:'',quiet_start:'22:00',quiet_end:'07:00',defaults:{frequency:'both',channels:['email'],relevance_threshold:'high',digest_day:'monday',digest_time:'07:00'}};}
-export async function getAccount(owner:string){const row=await database().prepare('SELECT data,password_hash FROM accounts WHERE id=?').bind(owner).first<{data:string;password_hash:string|null}>();if(!row)throw new HttpError(404,'Account unavailable.');return {...JSON.parse(row.data),has_password:!!row.password_hash} as Account;}
+export function defaultAccount(name:string,email:string,locale:Locale='en'):Account{return {name,email,locale,firm:'',quiet_start:'22:00',quiet_end:'07:00',defaults:{frequency:'both',channels:['email'],relevance_threshold:'high',digest_day:'monday',digest_time:'07:00'}};}
+export async function getAccount(owner:string){const row=await database().prepare('SELECT data,password_hash FROM accounts WHERE id=?').bind(owner).first<{data:string;password_hash:string|null}>();if(!row)throw new HttpError(404,'Account unavailable.');return {...JSON.parse(row.data),locale:normalizeLocale(JSON.parse(row.data).locale),has_password:!!row.password_hash} as Account;}
 export async function getProfiles(owner:string){const rows=await database().prepare('SELECT data FROM profiles WHERE owner_id=? ORDER BY rowid').bind(owner).all<{data:string}>();return rows.results.map(r=>JSON.parse(r.data) as MonitoringProfile);}
 export async function getProfile(owner:string,id:string){const row=await database().prepare('SELECT data FROM profiles WHERE id=? AND owner_id=?').bind(id,owner).first<{data:string}>();if(!row)throw new HttpError(404,'Profile unavailable.');return JSON.parse(row.data) as MonitoringProfile;}
 export async function getUpdate(owner:string,id:string){const row=await database().prepare('SELECT data,source_text FROM updates WHERE id=? AND owner_id=?').bind(id,owner).first<{data:string;source_text:string}>();if(!row)throw new HttpError(404,'Update unavailable.');return {update:JSON.parse(row.data) as Update,sourceText:row.source_text};}

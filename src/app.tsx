@@ -1,4 +1,6 @@
 "use client";
+import {useI18n,LanguageSwitcher} from './i18n/client';
+
 import {
   useCallback,
   useEffect,
@@ -37,6 +39,8 @@ export type Actions = {
 };
 const serverSnapshot = () => null;
 export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
+ const {t:tr,locale}=useI18n();
+
   const state = useSyncExternalStore(
     stateStore.subscribe,
     stateStore.snapshot,
@@ -61,11 +65,11 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
     try {
       await work();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not save this change. Please try again.");
+      toast.error(error instanceof Error ? tr(error.message) : tr("Could not save this change. Please try again."));
     }
-  }, []);
+  }, [tr]);
   useEffect(() => {
-    void stateStore.refresh().catch((error)=>{setLoadError(error.message);toast.error(error.message);});
+    void stateStore.refresh().catch((error)=>{setLoadError(error.message);toast.error(tr(error.message));});
     const sync=()=>{setPath(location.pathname);setQuery(location.search);};
     sync();
     const timer=setInterval(()=>{if(document.visibilityState==='visible')void stateStore.refresh().catch(()=>{});},30000);
@@ -91,7 +95,7 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
     })().catch(() => {
       setReady(true);
       toast.error(
-        "Could not load monitoring profiles. Please reload or create a new profile.",
+        tr("Could not load monitoring profiles. Please reload or create a new profile."),
       );
     });
     return () => {
@@ -135,7 +139,7 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
   if (!state || !ready)
     content = (
       <div className="loading" role="status">
-        {loadError ? <><p role="alert">{loadError}</p><Button onClick={()=>location.reload()}>Retry</Button></> : "Loading monitoring profiles…"}
+        {loadError ? <><p role="alert">{tr(loadError)}</p><Button onClick={()=>location.reload()}>{tr("Retry")}</Button></> : tr("Loading monitoring profiles…")}
       </div>
     );
   else if(path==='/feed-limit')content=<FeedLimitPage quota={state.feed_quota??{limit:3,used:profiles.length,request:null}}/>;
@@ -150,13 +154,10 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
   else if (isEmpty)
     content = (
       <Empty className="first-login">
-        <h1>
-          Tell us what to watch.
-          <br />
-          <span>We handle the rest.</span>
+        <h1> {tr("Tell us what to watch.")} <br />
+          <span>{tr("We handle the rest.")}</span>
         </h1>
-        <Button onClick={begin}>
-          Create monitoring profile <ArrowRight />
+        <Button onClick={begin}> {tr("Create monitoring profile")} <ArrowRight />
         </Button>
       </Empty>
     );
@@ -209,8 +210,8 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
   else
     content = (
       <Empty>
-        <h1>Page unavailable</h1>
-        <Button onClick={() => go("/feed")}>Go to feed</Button>
+        <h1>{tr("Page unavailable")}</h1>
+        <Button onClick={() => go("/feed")}>{tr("Go to feed")}</Button>
       </Empty>
     );
   return (
@@ -222,14 +223,12 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
           </button>
         </SidebarHeader>
         <SidebarContent>
-          <nav aria-label="Main navigation" className="main-nav">
+          <nav aria-label={tr("Main navigation")} className="main-nav">
             <button
               className={path === "/" || path === "/feed" ? "active" : ""}
               onClick={() => go("/feed")}
             >
-              <Rss />
-              Feed
-              <span className="nav-count">
+              <Rss /> {tr("Feed")} <span className="nav-count">
                 {updates.filter((u) => !u.read && !u.hidden).length || ""}
               </span>
             </button>
@@ -237,13 +236,11 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
               className={path.startsWith("/profiles") ? "active" : ""}
               onClick={() => go("/profiles")}
             >
-              <Layers2 />
-              Profiles
-            </button>
+              <Layers2 /> {tr("Profiles")} </button>
           </nav>
           {profiles.length > 0 && (
             <div className="sidebar-profiles">
-              <p>PROFILES</p>
+              <p>{tr("PROFILES")}</p>
               {profiles.map((p) => (
                 <button
                   key={p.id}
@@ -259,28 +256,24 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
                 </button>
               ))}
               <button className="new-profile" onClick={begin}>
-                <Plus />
-                New profile
-              </button>
+                <Plus /> {tr("New profile")} </button>
             </div>
           )}
         </SidebarContent>
         <SidebarFooter>
           <button className="settings-link" onClick={() => go("/settings")}>
-            <Settings2 />
-            Settings
-          </button>
-          <button className="settings-link" onClick={()=>void run(async()=>{await api('auth/logout','POST',{});stateStore.reset();location.assign('/login');})}>Sign out</button>
+            <Settings2 /> {tr("Settings")} </button>
+          <button className="settings-link" onClick={()=>void run(async()=>{await api('auth/logout','POST',{});stateStore.reset();location.assign('/login');})}>{tr("Sign out")}</button>
           <div className="account-lockup">
             <Avatar className="avatar" aria-hidden="true">
 
               <AvatarFallback>
-                {(state?.account.name || "Account").slice(0, 1)}
+                {(state?.account.name || tr("Account")).slice(0, 1)}
               </AvatarFallback>
             </Avatar>
             <div>
-              {state?.account.name || "Account"}
-              <small>{state?.account.firm || "Personal account"}</small>
+              {state?.account.name || tr("Account")}
+              <small>{state?.account.firm || tr("Personal account")}</small>
             </div>
           </div>
         </SidebarFooter>
@@ -290,14 +283,14 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
           <SidebarTrigger className="mobile-menu" />
           <span>
             {isWizard
-              ? "Monitoring profile"
+              ? tr("Monitoring profile")
               : path.startsWith("/profiles")
-                ? "Profiles"
-                : path === '/feed-limit' ? 'Feed limit' : path === "/settings"
-                  ? "Settings"
-                  : "Monitoring"}
+                ? tr("Profiles")
+                : path === '/feed-limit' ? tr("Feed limit") : path === "/settings"
+                  ? tr("Settings")
+                  : tr("Monitoring")}
           </span>
-          <span className="topbar-right">Legal Feed</span>
+          <LanguageSwitcher/><span className="topbar-right">{tr("Legal Feed")}</span>
         </header>
         <main
           id="main-content"

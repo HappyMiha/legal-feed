@@ -1,6 +1,8 @@
+import {translate,type Locale,type Values} from "../i18n/core";
 import type { Update } from "../domain/monitoring";
-export function summaryText(u: Update, disclosure: boolean) {
-  return `${u.headline}\n${u.source_name} | ${u.published_at}\n\n${u.summary}\n\nWhy it matters for ${u.client_name}\n${u.why_it_matters}\n\nSource: ${u.url || ""}${disclosure ? "\n\nAI-assisted summary — consult the original source." : ""}`;
+export function summaryText(u: Update, disclosure: boolean,locale:Locale="en") {
+  const tr=(key:string,values?:Values)=>translate(locale,key,values);
+  return `${u.headline}\n${u.source_section==="signal"?u.source_name:tr(u.source_name)} | ${u.published_at}\n\n${u.summary}\n\n${tr("Why it matters for {0}",{0:u.client_name})}\n${u.why_it_matters}\n\n${tr("Source: {0}",{0:u.url||""})}${disclosure ? "\n\n"+tr("AI-assisted summary — consult the original source.") : ""}`;
 }
 export function downloadBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
@@ -14,7 +16,9 @@ export async function exportUpdatePDF(
   u: Update,
   includeNote: boolean,
   disclosure: boolean,
+  locale:Locale="en",
 ) {
+  const tr=(key:string,values?:Values)=>translate(locale,key,values);
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const font = await fetch("/fonts/DejaVuSans.ttf");
@@ -42,19 +46,19 @@ export async function exportUpdatePDF(
   };
   text(u.headline, 18, 9);
   text(
-    `${u.source_name} | ${u.published_at} | ${u.relevance === "high" ? "High" : "Medium"} relevance`,
+    `${u.source_section==="signal"?u.source_name:tr(u.source_name)} | ${u.published_at} | ${tr(u.relevance === "high" ? "High relevance" : "Medium relevance")}`,
   );
-  text(`Matched topic: ${u.topic_title}`);
-  text(`Legal basis: ${u.legal_basis}`, 10, 10);
-  text(`Source: ${u.url || ""}`, 9, 6);
-  text("Summary", 13, 3);
+  text(tr("Matched topic: {0}",{0:u.topic_title}));
+  text(tr("Legal basis: {0}",{0:u.legal_basis==="Not specified in the source"?tr(u.legal_basis):u.legal_basis}), 10, 10);
+  text(`${tr("Source: {0}",{0:u.url||""})}`, 9, 6);
+  text(tr("Summary"), 13, 3);
   text(u.summary, 11, 10);
-  text(`Why it matters for ${u.client_name}`, 13, 3);
+  text(`${tr("Why it matters for {0}",{0:u.client_name})}`, 13, 3);
   text(u.why_it_matters, 11, 10);
   if (includeNote && u.note) {
-    text("Private note", 13, 3);
+    text(tr("Private note"), 13, 3);
     text(u.note);
   }
-  if (disclosure) text("AI-assisted summary — consult the original source.", 9);
+  if (disclosure) text(tr("AI-assisted summary — consult the original source."), 9);
   downloadBlob(doc.output("blob"), `legal-feed-${u.published_at}.pdf`);
 }

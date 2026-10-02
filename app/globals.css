@@ -1439,3 +1439,7 @@ dd {
  .landing-step-arrow { display: none; }
  .landing-provider,.landing-credit { align-items: flex-start; }
 }
+
+/* Account and guest locale preference, with native language names. */
+.language-control{font-size:.85rem;max-width:100%}.language-control label{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}.language-control select{max-width:100%;background:var(--background,#fff);color:inherit;border:1px solid var(--border,#d6d6d3);border-radius:6px;padding:.4rem .55rem;min-height:36px}.language-control .error{display:block;margin-top:.4rem}.landing-main>.language-control{align-self:flex-end;margin-bottom:1.5rem}.auth-card>.language-control{margin:1rem 0}.topbar>.language-control{margin-left:auto}.topbar .language-control label>span{display:none}
+@media(max-width:600px){.topbar{gap:.65rem}.topbar-right{display:none}.topbar .language-control select{max-width:170px}}
