@@ -190,7 +190,7 @@ export function Profiles({
           </section>
         ))}
       </div>
-      <MonitoringHealth profileId={p.id} />
+      <MonitoringHealth profile={p} />
       <section className="history">
         <h2>History</h2>
         {updates.some((u) => u.profile_id === id) ? (
@@ -558,9 +558,13 @@ export function SettingsPage({
   );
 }
 
-function MonitoringHealth({profileId}:{profileId:string}){
+function MonitoringHealth({profile}:{profile:MonitoringProfile}){
+ const profileId=profile.id;
  const [status,setStatus]=useState<{sources:{profile_id:string;source_id:string;checked_at:string;status:string;detail:string;next_run:number}[]} | null>(null);
  useEffect(()=>{let alive=true;const load=()=>{void api<typeof status>("health").then(s=>{if(alive)setStatus(s);}).catch(()=>{});};load();const timer=setInterval(load,30000);return()=>{alive=false;clearInterval(timer);};},[profileId]);
- const checks=status?.sources.filter(s=>s.profile_id===profileId)||[];
- return <section className="panel"><h2>Monitoring status</h2>{checks.length?<><p className="muted">Last check {new Date(Math.max(...checks.map(c=>Date.parse(c.checked_at)))).toLocaleString()}</p>{checks.filter(s=>s.status==='error').map(s=><p className="error" key={s.source_id}>{s.source_id}: {s.detail}</p>)}{checks.some(s=>s.status==='retrying')&&<p className="muted" role="status">Analysis is temporarily delayed. Monitoring will retry automatically; your saved updates are available.</p>}{checks.some(s=>s.status==='queued')&&<p className="muted">More publications are queued for analysis.</p>}{checks.every(s=>s.status==='ok')&&<p className="muted">Connected sources are being checked for new publications.</p>}</>:<p className="muted">Your first source checks are queued. Updates appear when a relevant publication is found.</p>}</section>;
+ const sources=profile.sources.filter(source=>source.active);
+ const checks=status?.sources.filter(s=>s.profile_id===profileId&&sources.some(source=>source.id===s.source_id))||[];
+ if(profile.status==='paused')return <section className="panel"><h2>Monitoring status</h2><p className="muted">Monitoring is paused. Resume this profile to check for new publications.</p></section>;
+ if(!sources.length)return <section className="panel"><h2>Monitoring status</h2><p className="muted">No sources are enabled. Enable a source to start monitoring.</p></section>;
+ return <section className="panel"><h2>Monitoring status</h2>{checks.length?<><p className="muted">Last check {new Date(Math.max(...checks.map(c=>Date.parse(c.checked_at)))).toLocaleString()}</p>{checks.filter(s=>s.status==='error').map(s=><p className="error" key={s.source_id}>{sources.find(source=>source.id===s.source_id)?.name}: {s.detail}{s.next_run===0?' Recheck queued.':''}</p>)}{checks.some(s=>s.status==='retrying')&&<p className="muted" role="status">Analysis is temporarily delayed. Monitoring will retry automatically; your saved updates are available.</p>}{checks.some(s=>s.status==='queued')&&<p className="muted">More publications are queued for analysis.</p>}{checks.every(s=>s.status==='ok')&&checks.length===sources.length&&<p className="muted">Connected sources are being checked for new publications.</p>}{checks.length<sources.length&&<p className="muted">Newly selected sources are queued for their first check.</p>}</>:<p className="muted">Your first source checks are queued. Updates appear when a relevant publication is found.</p>}</section>;
 }

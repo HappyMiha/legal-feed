@@ -8,10 +8,14 @@ export const ANALYSIS_SYSTEM='You are a Swiss legal monitoring analyst. Classify
 
 export function analysisContract(articleCount:number,topicIds:string[]){
  if(articleCount<1||articleCount>MAX_ANALYSIS_ARTICLES||!topicIds.length)throw Error('Analysis requires selected topics and a bounded batch of documents.');
- const schema=z.object({matches:z.array(z.object({
-  index:z.number().int().min(0).max(articleCount-1),topic_ids:z.array(z.string()).min(1),relevance:z.enum(['high','medium']),
+ const fields={index:z.number().int().min(0).max(articleCount-1),
   summary:z.string().min(20).max(4000),why_it_matters:z.string().min(10).max(2500),legal_basis:z.string().max(1000),
- }).strict()).max(articleCount)}).strict().superRefine(({matches},context)=>{
+ };
+ const relevant=z.object({...fields,topic_ids:z.array(z.string()).min(1),relevance:z.enum(['high','medium'])}).strict();
+ // Apertus also expresses a completed negative classification explicitly. Validate it fully;
+ // empty-topic positive matches, malformed output and unknown references must still fail.
+ const rejected=z.object({...fields,topic_ids:z.array(z.string()).length(0),relevance:z.literal('none'),legal_basis:z.literal('')}).strict();
+ const schema=z.object({matches:z.array(z.discriminatedUnion('relevance',[relevant,rejected])).max(articleCount)}).strict().superRefine(({matches},context)=>{
   const indices=new Set<number>();
   matches.forEach((match,index)=>{
    if(indices.has(match.index))context.addIssue({code:'custom',path:['matches',index,'index'],message:'Duplicate article index.'});
@@ -20,5 +24,5 @@ export function analysisContract(articleCount:number,topicIds:string[]){
    if(match.topic_ids.some(id=>!topicIds.includes(id)))context.addIssue({code:'custom',path:['matches',index,'topic_ids'],message:'Unknown topic reference.'});
   });
  });
- return schema;
+ return schema.transform(({matches})=>({matches:matches.filter((match):match is z.infer<typeof relevant>=>match.relevance!=='none')}));
 }

@@ -12,6 +12,7 @@ import {AnalysisDeferred} from '@/src/server/ai-provider';
 import {repairSourceCopies} from '@/src/server/repair-sources';
 import { safeUrl, equalSecret } from '@/src/server/security';
 import { monitorNext } from '@/src/server/monitor';
+import {CURRENT_CHECKS,retryFailedChecks} from '@/src/server/monitor-maintenance';
 import { claimDeliveries, acknowledgeDelivery } from '@/src/server/delivery';
 import type { MonitoringProfile } from '@/src/domain/monitoring';
 export const dynamic='force-dynamic';
@@ -26,7 +27,8 @@ async function handle(request:Request){try{
   if(path[1]==='auth-health'){await sendSmtp();return json({smtp:'connected'});}
   if(path[1]==='repair-sources')return json(await repairSourceCopies());
   if(path[1]==='monitor')return json(await monitorNext());
-  if(path[1]==='monitor-status')return json((await db.prepare("SELECT c.source_id,c.status,count(*) AS checks,min(c.next_run) AS next_run FROM source_checks c JOIN profiles p ON p.id=c.profile_id WHERE p.status='active' GROUP BY c.source_id,c.status").all()).results);
+  if(path[1]==='monitor-status')return json((await db.prepare(`SELECT c.source_id,c.status,c.detail,count(*) AS checks,min(c.next_run) AS next_run ${CURRENT_CHECKS} WHERE p.status='active' GROUP BY c.source_id,c.status,c.detail`).all()).results);
+  if(path[1]==='retry-failed'){await retryFailedChecks(db);return json({ok:true});}
   if(path[1]==='deliveries')return json(await claimDeliveries());
   if(path[1]==='ack'){const input=z.object({id:z.string(),success:z.boolean(),error:z.string().optional(),unattempted:z.boolean().optional()}).parse(await body(request));await acknowledgeDelivery(input.id,input.success,input.error,input.unattempted);return json({ok:true});}
   if(path[1]==='cleanup'){await cleanupAuth();await db.batch([db.prepare('DELETE FROM rate_limits WHERE expires_at<?').bind(Date.now()),db.prepare('DELETE FROM email_verifications WHERE expires_at<?').bind(Date.now()),db.prepare('DELETE FROM search_cache WHERE expires_at<?').bind(Date.now())]);return json({ok:true});}
@@ -56,7 +58,7 @@ async function handle(request:Request){try{
   }
   if(method==='DELETE'){const {confirmation}=await body(request);if(confirmation!==existing.name)throw new HttpError(400,'Enter the exact profile name.');await db.prepare('DELETE FROM profiles WHERE id=? AND owner_id=?').bind(id,owner).run();return json({ok:true});}
   if(method==='POST'&&path[2]==='duplicate'){await rateLimit(owner,'create-profile',20);const now=new Date().toISOString(),p:MonitoringProfile={...existing,id:crypto.randomUUID(),name:`Copy of ${existing.name}`.slice(0,120),created_at:now,updated_at:now};const saved=await db.prepare('INSERT INTO profiles(id,owner_id,data,status,next_run,lease_until) SELECT ?,?,?,?,0,0 WHERE (SELECT count(*) FROM profiles WHERE owner_id=?)<50 RETURNING id').bind(p.id,owner,JSON.stringify(p),p.status,owner).first();if(!saved)throw new HttpError(400,'Your account can have up to 50 profiles.');return json(p,201);}
-  if(method==='POST'&&path[2]==='monitor'){await rateLimit(owner,'monitor',30);return json(await monitorNext(owner,id));}
+  if(method==='POST'&&path[2]==='monitor'){await rateLimit(owner,'monitor',30);await retryFailedChecks(db,owner,id);return json(await monitorNext(owner,id));}
  }
  if(path[0]==='updates'){
   const {update,sourceText}=await getUpdate(owner,path[1]);

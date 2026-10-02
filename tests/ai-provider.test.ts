@@ -90,3 +90,13 @@ test('short model references resolve to the original selected topic IDs',()=>{
  const match={index:0,topic_ids:['T2'],relevance:'high',summary:'A factual summary of a relevant employment decision.',why_it_matters:'Relevant to the selected employment monitoring topic.',legal_basis:''};
  assert.ok(contract.safeParse({matches:[match]}).success);assert.ok(!contract.safeParse({matches:[{...match,topic_ids:['T3']}]}).success);
 });
+test('completed explicit non-matches are valid without weakening positive-match validation',async(t)=>{
+ const {db,sqlite}=database(),contract=analysisContract(2,['T1']);
+ const negative={index:0,topic_ids:[],relevance:'none',summary:'The Federal Administrative Court ruled on cantonal hospital lists and appeal rights.',why_it_matters:'No direct or indirect relevance to the selected immigration monitoring topic.',legal_basis:''};
+ const positive={index:1,topic_ids:['T1'],relevance:'high',summary:'The publication concerns residence permit requirements for foreign nationals.',why_it_matters:'Directly relevant to the selected immigration monitoring topic.',legal_basis:''};
+ t.mock.method(globalThis,'fetch',async()=>Response.json({choices:[{message:{content:JSON.stringify({matches:[negative]})},finish_reason:'stop'}]}));
+ assert.deepEqual(await providerJson(db,config,ANALYSIS_SYSTEM,{},contract,5000,'legal_matches'),{matches:[]});
+ assert.deepEqual(contract.parse({matches:[negative,positive]}),{matches:[positive]});
+ for(const matches of [[{...negative,relevance:'high'}],[{...negative,topic_ids:['T1']}],[{...negative,relevance:'low'}],[{...negative,index:2}],[negative,{...positive,index:0}],[{...positive,topic_ids:['invented']}],[{...negative,why_it_matters:''}]])assert.equal(contract.safeParse({matches}).success,false);
+ assert.equal(contract.safeParse({matches:[negative],extra:'unexpected'}).success,false);sqlite.close();
+});

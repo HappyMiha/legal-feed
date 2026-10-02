@@ -2,7 +2,7 @@ import {z} from 'zod';
 import {runtime,database} from './runtime';
 import {providerJson} from './ai-provider';
 import type {Topic} from '../domain/monitoring';
-export async function aiJson<T>(system:string,input:unknown,schema:z.ZodType<T>,maxTokens=2200,operation='analysis'):Promise<T>{
+export async function aiJson<T>(system:string,input:unknown,schema:z.ZodType<T,z.ZodTypeDef,unknown>,maxTokens=2200,operation='analysis'):Promise<T>{
  return providerJson(database(),runtime(),system,input,schema,maxTokens,operation);
 }
 export async function suggestTopics(input:string):Promise<Topic[]>{

@@ -58,6 +58,8 @@ Verified direct connectors: Fedlex RSS, ESTV and BSV public news APIs, Federal A
 
 Source errors are visible under profile monitoring status. A source being selected is not a promise of comprehensive coverage. Some publishers block automated retrieval; image-only/PDF-only or login-only content is not fully ingested. Unknown publication dates are labelled **Discovered**, not presented as a new legal change. Legal-basis text is shown only when it appears in the captured source. Generated summaries require professional review; original publisher links and source excerpts are retained.
 
+AI results validate article indexes, selected topic references, completion status and content structure. A completed explicit `relevance: none` classification with no topic IDs is a valid non-match; malformed, contradictory or truncated responses remain failures and do not mark documents processed. Current monitoring health includes only enabled sources; historical checks remain retained. Paused profiles explicitly show that monitoring is paused. The protected `retry-failed` maintenance job requeues enabled failed checks without breaking live leases or erasing the previous failure before a real successful check.
+
 Teams/Slack channels and German/French interface controls remain disabled as in the supplied demo. The application does not claim those integrations exist.
 
 ## Operations

@@ -24,7 +24,7 @@ export function retryDelay(headers:Headers,now:number,fallback:number){
  return fallback;
 }
 type ProviderConfig={LLM_API_KEY?:string;LLM_BASE_URL?:string;LLM_MODEL?:string};
-export async function providerJson<T>(db:D1Database,config:ProviderConfig,system:string,input:unknown,schema:z.ZodType<T>,maxTokens=2200,operation='analysis'):Promise<T>{
+export async function providerJson<T>(db:D1Database,config:ProviderConfig,system:string,input:unknown,schema:z.ZodType<T,z.ZodTypeDef,unknown>,maxTokens=2200,operation='analysis'):Promise<T>{
  if(!config.LLM_API_KEY)throw new HttpError(503,'Topic analysis is temporarily unavailable.');
  const now=Date.now(),token=crypto.randomUUID();
  const permit=await db.prepare(`INSERT INTO ai_provider_state(id,next_request_at,lease_until,lease_token,failures) VALUES('primary',?,?,?,0)
