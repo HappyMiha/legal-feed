@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {CURRENT_CHECKS,retryFailedChecks} from '../src/server/monitor-maintenance';
+import {CURRENT_CHECKS,retryFailedChecks,nextMonitoringProfile} from '../src/server/monitor-maintenance';
 
 test('current health excludes disabled/removed sources; recheck preserves failures and active leases',async()=>{
  const sqlite=new DatabaseSync(':memory:');
@@ -22,4 +22,22 @@ test('current health excludes disabled/removed sources; recheck preserves failur
  assert.equal(sqlite.prepare("SELECT lease_token FROM profiles WHERE id='busy'").get()!.lease_token,'live-token');
  await retryFailedChecks(db);assert.equal(sqlite.prepare("SELECT next_run FROM source_checks WHERE id='other:enabled'").get()!.next_run,0);
  assert.equal(sqlite.prepare("SELECT next_run FROM source_checks WHERE id='busy:enabled'").get()!.next_run,123456);sqlite.close();
+});
+
+test('due enabled failures take priority without bypassing owners, backoff, pauses or leases',async()=>{
+ const sqlite=new DatabaseSync(':memory:');
+ sqlite.exec('CREATE TABLE profiles(id TEXT,owner_id TEXT,data TEXT,status TEXT,next_run INTEGER,lease_until INTEGER); CREATE TABLE source_checks(profile_id TEXT,source_id TEXT,status TEXT,next_run INTEGER)');
+ for(const [id,owner,next,status,lease] of [['backlog','one',0,'active',0],['recovery','two',10,'active',0],['busy','two',0,'active',1000],['paused','two',0,'paused',0]] as const){
+  sqlite.prepare('INSERT INTO profiles VALUES(?,?,?,?,?,?)').run(id,owner,JSON.stringify({sources:[{id:'enabled',active:true},{id:'disabled',active:false}]}),status,next,lease);
+  sqlite.prepare('INSERT INTO source_checks VALUES(?,?,?,?)').run(id,id==='backlog'?'disabled':'enabled','error',0);
+ }
+ const db={prepare(sql:string){let args:(string|number)[]=[];const query={bind(...values:typeof args){args=values;return query;},async first(){return sqlite.prepare(sql).get(...args)||null;}};return query;}} as unknown as D1Database;
+ assert.equal((await nextMonitoringProfile(db,100))?.id,'recovery');
+ assert.equal((await nextMonitoringProfile(db,100,'one'))?.id,'backlog');
+ assert.equal(await nextMonitoringProfile(db,100,'one','recovery'),null);
+ assert.equal(await nextMonitoringProfile(db,100,undefined,'busy'),null);
+ assert.equal(await nextMonitoringProfile(db,100,undefined,'paused'),null);
+ sqlite.exec("UPDATE source_checks SET next_run=200 WHERE profile_id='recovery'");assert.equal((await nextMonitoringProfile(db,100))?.id,'backlog');
+ sqlite.exec("UPDATE source_checks SET status='ok',next_run=0 WHERE profile_id='recovery'");assert.equal((await nextMonitoringProfile(db,100))?.id,'backlog');
+ sqlite.exec("UPDATE source_checks SET status='retrying' WHERE profile_id='recovery'");assert.equal((await nextMonitoringProfile(db,100))?.id,'recovery');sqlite.close();
 });

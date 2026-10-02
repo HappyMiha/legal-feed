@@ -6,11 +6,12 @@ import {hash} from './security';
 import {AnalysisDeferred,InvalidAnalysis,providerReadyAt} from './ai-provider';
 import {MAX_ANALYSIS_ARTICLES} from './analysis-contract';
 import {invalidAnalysisRetry} from './monitor-policy';
+import {nextMonitoringProfile} from './monitor-maintenance';
 export async function monitorNext(owner?:string,profileId?:string){
  const db=database(),now=Date.now(),token=crypto.randomUUID();
  const readyAt=await providerReadyAt(db);
  if(readyAt>now)return {processed:false,status:'retrying',retry_at:readyAt};
- const candidate=await db.prepare(`SELECT id,owner_id,data FROM profiles WHERE status='active' AND lease_until<? AND next_run<=? ${owner?'AND owner_id=?':''} ${profileId?'AND id=?':''} ORDER BY next_run LIMIT 1`).bind(now,now,...owner?[owner]:[],...profileId?[profileId]:[]).first<{id:string;owner_id:string;data:string}>();
+ const candidate=await nextMonitoringProfile(db,now,owner,profileId);
  if(!candidate){
   const due=await db.prepare(`SELECT min(max(next_run,lease_until)) AS ready FROM profiles WHERE status='active' ${owner?'AND owner_id=?':''} ${profileId?'AND id=?':''}`).bind(...owner?[owner]:[],...profileId?[profileId]:[]).first<{ready:number|null}>();
   return {processed:false,...due?.ready&&due.ready>now&&due.ready<now+120000?{retry_at:due.ready}:{}};
@@ -20,7 +21,7 @@ export async function monitorNext(owner?:string,profileId?:string){
  try{
   const checks=await db.prepare('SELECT source_id,next_run,analysis_attempts,status FROM source_checks WHERE profile_id=?').bind(profile.id).all<{source_id:string;next_run:number;analysis_attempts:number;status:string}>();
   const due=new Map(checks.results.map(r=>[r.source_id,r.next_run]));
-  const retrying=new Set(checks.results.filter(check=>check.status==='retrying'&&check.next_run<=now).map(check=>check.source_id));
+  const retrying=new Set(checks.results.filter(check=>['error','retrying'].includes(check.status)&&check.next_run<=now).map(check=>check.source_id));
   const source=profile.sources.filter(s=>s.active).sort((a,b)=>Number(retrying.has(b.id))-Number(retrying.has(a.id))||(due.get(a.id)||0)-(due.get(b.id)||0))[0];
   if(!source||(due.get(source.id)||0)>now){await db.prepare('UPDATE profiles SET next_run=? WHERE id=? AND lease_token=?').bind(source?due.get(source.id)!:now+15*60000,profile.id,token).run();return {processed:true,idle:true};}
   let count=0,status='ok',detail='',nextRun=now+3600000,retryAt:number|undefined;
