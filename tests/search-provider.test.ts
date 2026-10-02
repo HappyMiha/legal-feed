@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
-import {searchPublications,scopedResults} from '../src/server/search-provider';
+import {searchPublications,scopedResults,searchSourcePublications} from '../src/server/search-provider';
+import {parseNewsSitemap} from '../src/server/feed';
 
 function database(){
  const sqlite=new DatabaseSync(':memory:');
@@ -51,4 +52,34 @@ test('partial results keep their failure status through cached domain and path f
  assert.throws(()=>scopedResults({...offScope,results:[{...result,link:'https://127.0.0.1/private'}]},source),/unavailable/);
  assert.deepEqual(scopedResults({...body,results:[{...result,link:'https://bger.ch/news-other'}]},source),[]);
  assert.equal(scopedResults({...body,results:[{...result,link:'https://bger.ch/news/decision'}]},source).length,1);sqlite.close();
+});
+
+test('a bounded simpler query recovers real source results while preserving outages and scope',async(t)=>{
+ const {db,sqlite}=database(),queries:string[]=[];
+ const source={id:'federal-court',name:'Court',section:'government_federal' as const,type:'court' as const,active:true,url:'https://www.bger.ch/'};
+ const initial='site:bger.ch (several long OR topics)';
+ let fallback=()=>Response.json({...body,partial:true});
+ t.mock.method(globalThis,'fetch',async(_url:RequestInfo|URL,init?:RequestInit)=>{
+  const {query}=JSON.parse(String(init?.body));queries.push(query);
+  return query===initial?Response.json({...body,partial:true,results:[{...result,link:'https://other.example/page'}]}):fallback();
+ });
+ assert.deepEqual(await searchSourcePublications(db,config,'one',initial,source),[result]);
+ assert.deepEqual(queries,[initial,`site:bger.ch ${new Date().getUTCFullYear()}`]);
+ await searchSourcePublications(db,config,'one',initial,source);assert.equal(queries.length,2);
+ sqlite.exec('DELETE FROM search_cache');queries.length=0;fallback=()=>Response.json({...body,partial:true,results:[]});
+ await assert.rejects(searchSourcePublications(db,config,'one',initial,source),/unavailable/);assert.equal(queries.length,2);
+ sqlite.exec('DELETE FROM search_cache');queries.length=0;fallback=()=>Response.json({...body,partial:false,results:[{...result,link:'https://other.example/page'}]});
+ await assert.rejects(searchSourcePublications(db,config,'one',initial,source),/selected source/);assert.equal(queries.length,2);
+ sqlite.exec('DELETE FROM search_cache');queries.length=0;fallback=()=>new Response('Unavailable',{status:503});
+ await assert.rejects(searchSourcePublications(db,config,'one','different query',source),/unavailable/);assert.equal(queries.length,1);
+ sqlite.exec('DELETE FROM search_cache');queries.length=0;fallback=()=>Response.json({...body,partial:false,results:[]});
+ assert.deepEqual(await searchSourcePublications(db,config,'one','signal query',{...source,section:'signal',url:'https://bger.ch/news'}),[]);
+ assert.equal(queries[1],`site:bger.ch/news ${new Date().getUTCFullYear()}`);sqlite.close();
+});
+
+test('publisher news sitemaps retain source titles and dates and reject invalid evidence',()=>{
+ const entry='<url><loc>https://www.economiesuisse.ch/de/artikel/publication?a=1&amp;b=2</loc><news:news><news:title><![CDATA[Title für law & policy]]></news:title><news:publication_date>2026-09-29T13:23:21+00:00</news:publication_date></news:news></url>';
+ assert.deepEqual(parseNewsSitemap(`<urlset>${entry}</urlset>`),[{title:'Title für law & policy',url:'https://www.economiesuisse.ch/de/artikel/publication?a=1&b=2',date:'2026-09-29'}]);
+ assert.deepEqual(parseNewsSitemap('<urlset></urlset>'),[]);
+ for(const xml of ['<html>Access denied</html>','<urlset><url><loc>https://economiesuisse.ch/news</loc></urlset>',`<urlset>${entry}`,`<urlset>${entry.replace('2026-09-29T13:23:21+00:00','invalid')}</urlset>`,`<urlset>${entry.replace('https://www.economiesuisse.ch','https://127.0.0.1')}</urlset>`])assert.throws(()=>parseNewsSitemap(xml));
 });

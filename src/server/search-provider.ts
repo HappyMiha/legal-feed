@@ -8,6 +8,23 @@ const resultSchema=z.object({title:z.string().min(1).max(1000),link:z.string().m
 const responseSchema=z.object({provider:z.literal('SearXNG'),partial:z.boolean(),results:z.array(resultSchema).max(12)});
 export type SearchResult=z.infer<typeof resultSchema>;
 type SearchResponse=z.infer<typeof responseSchema>;
+class IncompleteSearch extends Error {constructor(){super('Some search engines are unavailable. Automatic retry scheduled.');}}
+
+export function sourceSearchScope(source:Source){
+ const url=safeUrl(source.url!);
+ return `${url.hostname.replace(/^www\./,'')}${source.section==='signal'&&url.pathname!=='/'?url.pathname:''}`;
+}
+
+export async function searchSourcePublications(db:D1Database,config:SearchConfig,profileId:string,query:string,source:Source):Promise<SearchResult[]>{
+ try{const found=scopedResults(await searchPublications(db,config,profileId,query),source);if(found.length)return found;}
+ catch(error){if(!(error instanceof IncompleteSearch))throw error;}
+ // Some engines ignore complex OR queries. A bounded publisher/year query still
+ // discovers real publications; relevance is assessed from their actual text.
+ const fallback=`site:${sourceSearchScope(source)} ${source.id==='expertsuisse'?'aktuell':new Date().getUTCFullYear()}`;
+ const response=await searchPublications(db,config,profileId,fallback),found=scopedResults(response,source);
+ if(response.results.length&&!found.length)throw Error('Search did not return the selected source. Automatic retry scheduled.');
+ return found;
+}
 
 export function withinSource(value:string,source:Source):boolean{
  try{const url=safeUrl(source.url!),domain=url.hostname.replace(/^www\./,''),u=safeUrl(value);
@@ -16,7 +33,7 @@ export function withinSource(value:string,source:Source):boolean{
 }
 export function scopedResults(data:SearchResponse,source:Source):SearchResult[]{
  const results=data.results.filter(item=>withinSource(item.link,source));
- if(data.partial&&!results.length)throw Error('Some search engines are unavailable. Automatic retry scheduled.');
+ if(data.partial&&!results.length)throw new IncompleteSearch();
  return results;
 }
 
@@ -34,7 +51,7 @@ export async function searchPublications(db:D1Database,config:SearchConfig,profi
  try{data=responseSchema.parse(JSON.parse(await limitedText(response,150000)));}
  catch{throw Error('Public search returned an invalid response. Automatic retry scheduled.');}
  // A failed engine with no candidates is not evidence that nothing was published.
- if(data.partial&&!data.results.length)throw Error('Some search engines are unavailable. Automatic retry scheduled.');
+ if(data.partial&&!data.results.length)throw new IncompleteSearch();
  const safe=data.results.filter(item=>{try{safeUrl(item.link);return true;}catch{return false;}});
  if(data.results.length&&!safe.length)throw Error('Public search returned invalid source links. Automatic retry scheduled.');
  data.results=safe;
