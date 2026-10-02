@@ -27,7 +27,7 @@ export async function searchPublications(db:D1Database,config:SearchConfig,profi
  const cached=await db.prepare('SELECT data FROM search_cache WHERE id=? AND profile_id=? AND expires_at>?').bind(id,profileId,Date.now()).first<{data:string}>();
  if(cached){const parsed=responseSchema.safeParse(JSON.parse(cached.data));if(parsed.success)return parsed.data;}
  let response:Response;
- try{response=await fetch(endpoint,{method:'POST',redirect:'error',headers:{authorization:`Bearer ${config.SEARCH_SERVICE_TOKEN}`,'content-type':'application/json','user-agent':'LegalFeed/1.0 (+https://github.com/HappyMiha/legal-feed)'},body:JSON.stringify({query}),signal:AbortSignal.timeout(25000)});}
+ try{response=await fetch(endpoint,{method:'POST',redirect:'manual',headers:{authorization:`Bearer ${config.SEARCH_SERVICE_TOKEN}`,'content-type':'application/json','user-agent':'LegalFeed/1.0 (+https://github.com/HappyMiha/legal-feed)'},body:JSON.stringify({query}),signal:AbortSignal.timeout(25000)});}
  catch(error){console.error('Public search transport failed',JSON.stringify({kind:error instanceof Error?error.name:'unknown'}));throw Error('Public search is temporarily unavailable. Automatic retry scheduled.');}
  if(!response.ok){console.error('Public search service failed',JSON.stringify({status:response.status,request_id:response.headers.get('cf-ray')}));await response.body?.cancel();throw Error(response.status===401?'Public search connection needs administrator attention.':'Public search is temporarily unavailable. Automatic retry scheduled.');}
  let data:z.infer<typeof responseSchema>;
