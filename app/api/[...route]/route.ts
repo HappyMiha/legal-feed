@@ -14,6 +14,8 @@ import { safeUrl, equalSecret } from '@/src/server/security';
 import { monitorNext } from '@/src/server/monitor';
 import {CURRENT_CHECKS,retryFailedChecks} from '@/src/server/monitor-maintenance';
 import { claimDeliveries, acknowledgeDelivery } from '@/src/server/delivery';
+import {insertLimitedProfile,requestFeedLimit,readLimitReview,decideFeedLimit,reviewTokenInput,getFeedQuota,expireLimitRequests} from '@/src/server/feed-limits';
+import {sendLimitMail} from '@/src/server/feed-limit-mail';
 import type { MonitoringProfile } from '@/src/domain/monitoring';
 export const dynamic='force-dynamic';
 const json=(value:unknown,status=200)=>Response.json(value,{status,headers:{'cache-control':'private, no-store','x-content-type-options':'nosniff'}});
@@ -31,25 +33,32 @@ async function handle(request:Request){try{
   if(path[1]==='retry-failed'){await retryFailedChecks(db);return json({ok:true});}
   if(path[1]==='deliveries')return json(await claimDeliveries());
   if(path[1]==='ack'){const input=z.object({id:z.string(),success:z.boolean(),error:z.string().optional(),unattempted:z.boolean().optional()}).parse(await body(request));await acknowledgeDelivery(input.id,input.success,input.error,input.unattempted);return json({ok:true});}
-  if(path[1]==='cleanup'){await cleanupAuth();await db.batch([db.prepare('DELETE FROM rate_limits WHERE expires_at<?').bind(Date.now()),db.prepare('DELETE FROM email_verifications WHERE expires_at<?').bind(Date.now()),db.prepare('DELETE FROM search_cache WHERE expires_at<?').bind(Date.now())]);return json({ok:true});}
+  if(path[1]==='cleanup'){await cleanupAuth();await expireLimitRequests(db);await db.batch([db.prepare('DELETE FROM rate_limits WHERE expires_at<?').bind(Date.now()),db.prepare('DELETE FROM email_verifications WHERE expires_at<?').bind(Date.now()),db.prepare('DELETE FROM search_cache WHERE expires_at<?').bind(Date.now())]);return json({ok:true});}
   throw new HttpError(404,'Unknown job.');
  }
  if(path[0]==='verify-email'&&method==='GET')return new Response(null,{status:302,headers:{location:'/verify-email#change='+encodeURIComponent(url.searchParams.get('token')||''),'cache-control':'no-store','referrer-policy':'no-referrer'}});
  if(method!=='GET'&&request.headers.get('origin')!==url.origin)throw new HttpError(403,'Request origin is not allowed.');
+ if(path[0]==='limit-review'){
+  if(method!=='POST')throw new HttpError(405,'POST required.');
+  if(path[1]==='read'){const {token}=reviewTokenInput.parse(await body(request));return json(await readLimitReview(db,token));}
+  if(path[1]==='decide')return json(await decideFeedLimit(db,await body(request)));
+  throw new HttpError(404,'Not found.');
+ }
  const session=await getSession(request.headers,url.href);if(!session)throw new HttpError(401,'Sign in to continue.');
  const owner=session.owner_id;
  if(method==='GET'&&path[0]==='state')return json(await state(owner));
  if(method==='GET'&&path[0]==='health')return json(await health(owner));
+ if(path[0]==='feed-limit-request'&&method==='POST'){await rateLimit(owner,'feed-limit-request',3);const id=await requestFeedLimit(db,owner,await body(request),runtime().SITE_URL!);await sendLimitMail(id);return json(await getFeedQuota(db,owner),201);}
  if(path[0]==='topics'&&method==='POST'){await rateLimit(owner,'topics',30);const {input}=z.object({input:z.string().trim().min(2).max(3000)}).parse(await body(request));return json(await suggestTopics(input));}
  if(path[0]==='sources'&&method==='GET')return json(path[1]==='cantons'?cantonSources(decodeURIComponent(path[2])):sources);
  if(path[0]==='preview'&&method==='POST'){const input=await body(request);const current=await state(owner);const ids=new Set((input.profile?.topics||[]).filter((t:{selected:boolean})=>t.selected).map((t:{id:string})=>t.id));return json(current.updates.find(u=>u.topic_ids.some(id=>ids.has(id)))||null);}
  if(path[0]==='profiles'){
   if(method==='POST'&&!path[1]){
-   await rateLimit(owner,'create-profile',20);const count=await db.prepare('SELECT COUNT(*) n FROM profiles WHERE owner_id=?').bind(owner).first<{n:number}>();if((count?.n||0)>=50)throw new HttpError(400,'Your account can have up to 50 profiles.');
+   await rateLimit(owner,'create-profile',20);
    const p=profileSchema.parse(await body(request));p.sources=p.sources.map(canonicalSource);for(const s of p.sources)if(s.url)safeUrl(s.url);
    const now=new Date().toISOString();p.created_at=now;p.updated_at=now;
    const collision=await db.prepare('SELECT owner_id FROM profiles WHERE id=?').bind(p.id).first<{owner_id:string}>();if(collision){if(collision.owner_id!==owner)throw new HttpError(409,'Profile ID already exists.');return json(await getProfile(owner,p.id));}
-   const saved=await db.prepare('INSERT INTO profiles(id,owner_id,data,status,next_run,lease_until) SELECT ?,?,?,?,0,0 WHERE (SELECT count(*) FROM profiles WHERE owner_id=?)<50 RETURNING id').bind(p.id,owner,JSON.stringify(p),p.status,owner).first();if(!saved)throw new HttpError(400,'Your account can have up to 50 profiles.');return json(p,201);
+   return json(await insertLimitedProfile(db,owner,p),201);
   }
   const id=path[1],existing=await getProfile(owner,id);
   if(method==='PUT'){
@@ -57,7 +66,7 @@ async function handle(request:Request){try{
    await db.prepare('UPDATE profiles SET data=?,status=?,next_run=0,lease_until=0,lease_token=NULL WHERE id=? AND owner_id=?').bind(JSON.stringify(p),p.status,id,owner).run();return json(p);
   }
   if(method==='DELETE'){const {confirmation}=await body(request);if(confirmation!==existing.name)throw new HttpError(400,'Enter the exact profile name.');await db.prepare('DELETE FROM profiles WHERE id=? AND owner_id=?').bind(id,owner).run();return json({ok:true});}
-  if(method==='POST'&&path[2]==='duplicate'){await rateLimit(owner,'create-profile',20);const now=new Date().toISOString(),p:MonitoringProfile={...existing,id:crypto.randomUUID(),name:`Copy of ${existing.name}`.slice(0,120),created_at:now,updated_at:now};const saved=await db.prepare('INSERT INTO profiles(id,owner_id,data,status,next_run,lease_until) SELECT ?,?,?,?,0,0 WHERE (SELECT count(*) FROM profiles WHERE owner_id=?)<50 RETURNING id').bind(p.id,owner,JSON.stringify(p),p.status,owner).first();if(!saved)throw new HttpError(400,'Your account can have up to 50 profiles.');return json(p,201);}
+  if(method==='POST'&&path[2]==='duplicate'){await rateLimit(owner,'create-profile',20);const now=new Date().toISOString(),p:MonitoringProfile={...existing,id:crypto.randomUUID(),name:`Copy of ${existing.name}`.slice(0,120),created_at:now,updated_at:now};return json(await insertLimitedProfile(db,owner,p),201);}
   if(method==='POST'&&path[2]==='monitor'){await rateLimit(owner,'monitor',30);await retryFailedChecks(db,owner,id);return json(await monitorNext(owner,id));}
  }
  if(path[0]==='updates'){

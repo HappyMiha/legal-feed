@@ -50,6 +50,13 @@
       "when": 1790933088154,
       "tag": "0006_serious_enchantress",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790938116902,
+      "tag": "0007_same_miracleman",
+      "breakpoints": true
     }
   ]
 }

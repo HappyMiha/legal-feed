@@ -154,10 +154,11 @@ export function Wizard({
         stateStore.write({ ...stateStore.read(), draft: null });
         actions.go(`/profiles/${p.id}`);
       } else setActivated(result);
-    } catch {
+    } catch (error) {
       toast.error(
-        "Could not activate monitoring. Check the profile and try again.",
+        error instanceof Error?error.message:"Could not activate monitoring. Check the profile and try again.",
       );
+      if(!draft.editing_id){await stateStore.refresh().catch(()=>{});const current=stateStore.read();if(current.profiles.length>=(current.feed_quota?.limit??3))actions.go('/feed-limit');}
     } finally {
       setBusy(false);
       activationLock.current = false;

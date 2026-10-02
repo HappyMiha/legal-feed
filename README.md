@@ -37,6 +37,10 @@ The production build emits a Cloudflare Worker and static client assets. Migrati
 
 ## Background monitoring and email
 
+Accounts start with a total limit of three monitoring feeds, including paused profiles. Creation and duplication enforce the account's server-owned limit atomically. Existing feeds remain available if an account is already over its limit. Users can request a higher total from Profiles or Settings by providing a number and a reason; only one pending request per account is allowed.
+
+Requests send immediately to `info@helveticlens.ch`, with durable mail retries through the existing delivery job. The email contains private seven-day review links for approval, decline, or a different approved total. Viewing a link never changes a limit: a same-origin confirmation POST finalizes the request once and updates the account atomically. Tokens are not included in user state or exports; unsent mail payloads are cleared after delivery, decision, expiry or account deletion. Approval uses possession of the private emailed link, independently of ordinary account sign-in.
+
 `.github/workflows/monitor.yml` runs every 15 minutes and supports manual dispatch. It invokes secret-protected job endpoints, discovers and analyzes source documents, then delivers queued emails using STARTTLS SMTP. GitHub scheduling can be delayed; this is not a contractual delivery-time guarantee. Instant alerts mean delivery after discovery, subject to quiet hours. Sources are normally checked hourly. Weekly digests use Europe/Zurich, including daylight-saving transitions, and the selected day/time (default Monday 07:00).
 
 Repository configuration:

@@ -28,6 +28,7 @@ import { monitoringBackend } from "./production/backend";
 import { Wizard } from "./features/wizard";
 import { Feed, UpdateDetail, SourceView, Digest } from "./features/updates";
 import { Profiles, SettingsPage } from "./features/profiles";
+import {FeedLimitPage} from './features/feed-limits';
 export type Actions = {
   go: (path: string) => void;
   run: (work: () => Promise<void>) => Promise<void>;
@@ -100,6 +101,7 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
   const begin = () => {
     void run(async () => {
       const s = stateStore.read();
+      if(s.profiles.length>=(s.feed_quota?.limit??3)){go('/feed-limit');return;}
       if (!s.draft || s.draft.editing_id)
         stateStore.write({
           ...s,
@@ -128,7 +130,7 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
   const { profiles, updates } = model;
   const isWizard = path.startsWith("/monitoring/");
   const activeId = new URLSearchParams(query).get("profile") || profiles[0]?.id;
-  const isEmpty = !profiles.length && !isWizard && path != "/settings";
+  const isEmpty = !profiles.length && !isWizard && path != "/settings" && path!='/feed-limit';
   let content;
   if (!state || !ready)
     content = (
@@ -136,6 +138,7 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
         {loadError ? <><p role="alert">{loadError}</p><Button onClick={()=>location.reload()}>Retry</Button></> : "Loading monitoring profiles…"}
       </div>
     );
+  else if(path==='/feed-limit')content=<FeedLimitPage quota={state.feed_quota??{limit:3,used:profiles.length,request:null}}/>;
   else if (isWizard)
     content = (
       <Wizard
@@ -179,6 +182,7 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
         profiles={profiles}
         updates={updates}
         actions={actions}
+        quota={state.feed_quota}
       />
     );
   else if (path.startsWith("/digest/"))
@@ -289,7 +293,7 @@ export default function LegalFeedApp({ config }: { config: RuntimeConfig }) {
               ? "Monitoring profile"
               : path.startsWith("/profiles")
                 ? "Profiles"
-                : path === "/settings"
+                : path === '/feed-limit' ? 'Feed limit' : path === "/settings"
                   ? "Settings"
                   : "Monitoring"}
           </span>

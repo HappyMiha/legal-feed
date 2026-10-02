@@ -1,7 +1,15 @@
 import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {sql} from 'drizzle-orm';
 export const accounts = sqliteTable('accounts', {
-  id: text('id').primaryKey(), data: text('data').notNull(), passwordHash: text('password_hash'), passwordSalt: text('password_salt'), createdAt: text('created_at').notNull(),
+  id: text('id').primaryKey(), data: text('data').notNull(), passwordHash: text('password_hash'), passwordSalt: text('password_salt'), createdAt: text('created_at').notNull(), feedLimit:integer('feed_limit').notNull().default(3),
 });
+export const feedLimitRequests=sqliteTable('feed_limit_requests',{
+ id:text('id').primaryKey(),ownerId:text('owner_id').notNull().references(()=>accounts.id,{onDelete:'cascade'}),
+ requestedLimit:integer('requested_limit').notNull(),reason:text('reason').notNull(),status:text('status').notNull().default('pending'),
+ tokenHash:text('token_hash').notNull(),expiresAt:integer('expires_at').notNull(),createdAt:text('created_at').notNull(),
+ approvedLimit:integer('approved_limit'),decidedAt:text('decided_at'),decisionNonce:text('decision_nonce'),
+ mailPayload:text('mail_payload').notNull(),mailStatus:text('mail_status').notNull().default('pending'),mailAttempts:integer('mail_attempts').notNull().default(0),mailNextAttempt:integer('mail_next_attempt').notNull().default(0),
+},t=>[uniqueIndex('feed_limit_token').on(t.tokenHash),uniqueIndex('feed_limit_pending_owner').on(t.ownerId).where(sql`${t.status}='pending'`),index('feed_limit_owner').on(t.ownerId)]);
 export const authSessions = sqliteTable('auth_sessions', {
   tokenHash: text('token_hash').primaryKey(),
   ownerId: text('owner_id').notNull().references(() => accounts.id, {onDelete:'cascade'}),

@@ -2,6 +2,12 @@
 @import "tw-animate-css";
 @import "../vendor/shadcn-tailwind-4.13.0.css";
 @import "./design-tokens.css";
+.quota-summary { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem; }
+.quota-review { max-width:44rem; }
+.quota-details { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.5fr); gap:.75rem 1rem; margin:1.5rem 0; }
+.quota-details dd { margin:0; overflow-wrap:anywhere; font-weight:600; }
+.request-reason { white-space:pre-wrap; overflow-wrap:anywhere; border-left:3px solid currentColor; padding:.5rem 1rem; margin:1rem 0 1.5rem; }
+.quota-review select { width:100%; border:1px solid var(--border); border-radius:.5rem; padding:.75rem; background:var(--background); color:var(--foreground); }
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

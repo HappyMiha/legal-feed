@@ -18,6 +18,11 @@ class ProductionAPI(unittest.TestCase):
  def profile(self):
   p={'id':str(uuid.uuid4()),'name':'Integration test','status':'paused','topics':[{'id':'test-topic','title':'Test legal topic','description':'API test only','origin':'user','selected':True}], 'sources':[{'id':'fedlex','name':'Fedlex','section':'government_federal','type':'law','active':True}],'delivery':{'frequency':'both','channels':['email'],'relevance_threshold':'high','digest_day':'monday','digest_time':'07:00'},'created_at':'','updated_at':''}
   status,value=call('profiles','POST',p);self.assertEqual(status,201,value);self.ids.append(p['id']);return value
+ def tearDown(self):
+  # Each scenario has its own feed budget; do not carry fixtures into later tests.
+  with sqlite3.connect(self.db) as db:
+   db.execute('PRAGMA foreign_keys=ON')
+   db.execute('DELETE FROM profiles WHERE owner_id=?',(self.owner,))
  @classmethod
  def tearDownClass(cls):
   with sqlite3.connect(cls.db) as db:

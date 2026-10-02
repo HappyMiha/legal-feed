@@ -21,7 +21,7 @@ jobs:
           python3 - <<'PYENV'
           import secrets
           from pathlib import Path
-          Path('.dev.vars').write_text('SITE_URL=http://localhost:5173\nAUTH_MAIL_TEST_STORE=true\nAUTH_SECRET='+secrets.token_hex(32)+'\n')
+          Path('.dev.vars').write_text('SITE_URL=http://localhost:5173\nAUTH_MAIL_TEST_STORE=true\nAUTH_SECRET='+secrets.token_hex(32)+'\nCRON_SECRET='+secrets.token_hex(32)+'\n')
           PYENV
           npm run dev > /tmp/legal-feed-dev.log 2>&1 &
           server_pid=$!

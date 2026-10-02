@@ -92,6 +92,7 @@ export type Account = {
   defaults: Delivery;
 };
 export type AppState = {
+  feed_quota?: FeedQuota;
   account_id?: string;
   version: 1;
   draft: Draft | null;
@@ -99,6 +100,9 @@ export type AppState = {
   updates: Update[];
   account: Account;
 };
+export type FeedLimitRequest={id:string;requested_limit:number;reason:string;status:'pending'|'approved'|'rejected'|'expired';approved_limit:number|null;created_at:string;expires_at:number;decided_at:string|null};
+export type FeedQuota={limit:number;used:number;request:FeedLimitRequest|null};
+export type FeedLimitReview=FeedLimitRequest & {name:string;email:string;limit:number;used:number};
 export type RuntimeConfig = {
   summaryNotice: boolean;
   processingModel: string;

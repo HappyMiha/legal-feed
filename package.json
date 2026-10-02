@@ -14,7 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts && python3 tests/delivery-runner.py",
-    "test:api": "python3 tests/api-integration.py && python3 tests/auth-integration.py",
+    "test:api": "python3 tests/api-integration.py && python3 tests/auth-integration.py && python3 tests/feed-limit-integration.py",
     "db:local": "node scripts/local-db.mjs"
   },
   "dependencies": {

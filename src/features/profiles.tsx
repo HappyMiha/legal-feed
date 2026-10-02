@@ -27,6 +27,7 @@ import type {
   Account,
   MonitoringProfile,
   Update,
+  FeedQuota,
 } from "../domain/monitoring";
 import type { Actions } from "../app";
 import { monitoringBackend } from "../production/backend";
@@ -39,11 +40,13 @@ export function Profiles({
   profiles,
   updates,
   actions,
+  quota,
 }: {
   id?: string;
   profiles: MonitoringProfile[];
   updates: Update[];
   actions: Actions;
+  quota?:FeedQuota;
 }) {
   const [deleting, setDeleting] = useState(false);
   const [confirmation, setConfirmation] = useState("");
@@ -58,6 +61,7 @@ export function Profiles({
             New profile
           </Button>
         </div>
+        <div className="quota-summary"><p>{profiles.length} of {quota?.limit??3} feeds used</p><Button variant="outline" onClick={()=>actions.go('/feed-limit')}>Request a higher limit</Button></div>
         <div className="profile-list">
           {profiles.map((p) => (
             <article className="panel" key={p.id}>
@@ -127,6 +131,7 @@ export function Profiles({
             variant="outline"
             onClick={() =>
               void actions.run(async () => {
+                if(profiles.length>=(quota?.limit??3)){actions.go('/feed-limit');return;}
                 const copy = await monitoringBackend.duplicateProfile(p.id);
                 actions.go(`/profiles/${copy.id}`);
               })
@@ -401,6 +406,7 @@ export function SettingsPage({
         </section>
         <Button type="submit">Save settings</Button>
       </form>
+      <section className="settings-section"><h2>Feed limit</h2><p>{state.profiles.length} of {state.feed_quota?.limit??3} feeds used. Active and paused profiles count toward this limit.</p><Button variant="outline" onClick={()=>actions.go('/feed-limit')}>View limit and request an increase</Button></section>
       <section className="settings-section hosting">
         <h2>Data and hosting</h2>
         <dl>
