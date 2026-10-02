@@ -1,6 +1,7 @@
 import type {MonitoringProfile,Source,Update} from '../domain/monitoring';
 import {publicFetch,limitedText,textContent,safeUrl,hash} from './security';
-import {runtime} from './runtime';
+import {runtime,database} from './runtime';
+import {searchPublications,scopedResults,withinSource} from './search-provider';
 import {aiJson} from './ai';
 import {analysisContract,analysisTopicRefs,ANALYSIS_SYSTEM} from './analysis-contract';
 import {InvalidAnalysis} from './ai-provider';
@@ -17,16 +18,13 @@ export async function extractArticle(url:string,title=''):Promise<Article>{
  return {url:safeUrl(response.url||url).href,title:title||textContent(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]||tag(html,'title')),text:body,date:Number.isFinite(date.getTime())?date.toISOString().slice(0,10):new Date().toISOString().slice(0,10),dateKind:Number.isFinite(date.getTime())?'published':'discovered'};
 }
 async function search(source:Source,profile:MonitoringProfile):Promise<Article[]>{
- const key=runtime().SEARCH_API_KEY;if(!key)throw Error('Search connector unavailable.');
  const url=safeUrl(source.url!);const topics=profile.topics.filter(t=>t.selected).map(t=>t.title).join(' OR ');
  const scope=source.section==='signal'?`${url.hostname}${url.pathname==='/'?'':url.pathname}`:url.hostname.replace(/^www\./,'');
  const query=`site:${scope} (${topics}) ${source.canton?source.name:''}`;
- const res=await fetch('https://api.search1api.com/search',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify({query,search_service:'google',max_results:6}),signal:AbortSignal.timeout(30000)});
- if(!res.ok)throw Error(`Search connector returned HTTP ${res.status}.`);
- const json=await res.json() as {results?:{title:string;link:string;snippet:string}[]};
- const found=(json.results||[]).filter(r=>{try{const u=safeUrl(r.link);return (u.hostname===url.hostname||u.hostname.replace(/^www\./,'')===url.hostname.replace(/^www\./,'')||u.hostname.endsWith('.'+url.hostname.replace(/^www\./,'')))&&(source.section!=='signal'||url.pathname==='/'||u.pathname.startsWith(url.pathname));}catch{return false;}});
+ const results=await searchPublications(database(),runtime(),profile.id,query);
+ const found=scopedResults(results,source);
  const articles:Article[]=[];let errors=0;
- for(const item of found.slice(0,4)){try{articles.push(await extractArticle(item.link,item.title));}catch{if(item.snippet?.length>80){articles.push({url:safeUrl(item.link).href,title:item.title,text:'Public search excerpt (full publication unavailable): '+item.snippet,date:new Date().toISOString().slice(0,10),dateKind:'discovered'});}else errors++;}}
+ for(const item of found.slice(0,4)){try{const article=await extractArticle(item.link,item.title);if(!withinSource(article.url,source))throw Error('Publication redirected outside the selected source.');articles.push(article);}catch{if(item.snippet?.length>80){articles.push({url:safeUrl(item.link).href,title:item.title,text:'Public search excerpt (full publication unavailable): '+item.snippet,date:new Date().toISOString().slice(0,10),dateKind:'discovered'});}else errors++;}}
  if(found.length&&errors===found.slice(0,4).length)throw Error('Search found publications, but the publisher blocked full-text access.');
  return articles;
 }

@@ -43,6 +43,13 @@
       "when": 1790792736806,
       "tag": "0005_furry_kingpin",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790933088154,
+      "tag": "0006_serious_enchantress",
+      "breakpoints": true
     }
   ]
 }

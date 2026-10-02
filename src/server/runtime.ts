@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-export type Runtime = { DB: D1Database; AUTH_SECRET?: string; SMTP_HOST?: string; SMTP_USER?: string; SMTP_PASSWORD?: string; AUTH_MAIL_TEST_STORE?: string; LLM_API_KEY?: string; LLM_BASE_URL?: string; LLM_MODEL?: string; SEARCH_API_KEY?: string; CRON_SECRET?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string; SITE_URL?: string; };
+export type Runtime = { DB: D1Database; AUTH_SECRET?: string; SMTP_HOST?: string; SMTP_USER?: string; SMTP_PASSWORD?: string; AUTH_MAIL_TEST_STORE?: string; LLM_API_KEY?: string; LLM_BASE_URL?: string; LLM_MODEL?: string; SEARCH_SERVICE_URL?: string; SEARCH_SERVICE_TOKEN?: string; CRON_SECRET?: string; RESEND_API_KEY?: string; EMAIL_FROM?: string; SITE_URL?: string; };
 export const runtime = () => env as unknown as Runtime;
 export const database = () => { const db = runtime().DB; if(!db) throw new Error('Database unavailable.'); return db; };
 export { HttpError } from './errors';

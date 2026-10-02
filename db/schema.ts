@@ -30,6 +30,9 @@ export const sourceChecks = sqliteTable('source_checks', {
 export const aiProviderState = sqliteTable('ai_provider_state', {
   id:text('id').primaryKey(),nextRequestAt:integer('next_request_at').notNull().default(0),leaseUntil:integer('lease_until').notNull().default(0),leaseToken:text('lease_token'),failures:integer('failures').notNull().default(0),
 });
+export const searchCache=sqliteTable('search_cache',{
+  id:text('id').primaryKey(),profileId:text('profile_id').notNull().references(()=>profiles.id,{onDelete:'cascade'}),data:text('data').notNull(),expiresAt:integer('expires_at').notNull(),
+},t=>[index('search_cache_expiry').on(t.expiresAt)]);
 export const outbox = sqliteTable('outbox', {
   id: text('id').primaryKey(), ownerId: text('owner_id').notNull().references(()=>accounts.id,{onDelete:'cascade'}), profileId: text('profile_id').notNull().references(()=>profiles.id,{onDelete:'cascade'}), data: text('data').notNull(), status: text('status').notNull().default('pending'), attempts: integer('attempts').notNull().default(0), nextAttempt: integer('next_attempt').notNull().default(0), providerId: text('provider_id'), error: text('error'), createdAt: text('created_at').notNull(), sentAt: text('sent_at'),
 }, t=>[index('outbox_due').on(t.status,t.nextAttempt),index('outbox_owner').on(t.ownerId)]);

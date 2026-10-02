@@ -8,7 +8,7 @@ Swiss legal monitoring, preserving the Helvetic Lens AIx interface and four-step
 
 ## Real services
 
-The application uses authenticated, account-scoped Cloudflare D1 storage; Swisscom Apertus 1.5 70B for topic suggestions and source-grounded analysis; official public feeds/APIs plus Search1API for discovery; and an Infomaniak SMTP transport for notification delivery. No fictional legal updates, preset scenario topics, recovery fixtures, artificial processing delay or local account backend are shipped.
+The application uses authenticated, account-scoped Cloudflare D1 storage; Swisscom Apertus 1.5 70B for topic suggestions and source-grounded analysis; official public feeds/APIs plus the existing Helvetic Lens SearXNG engine for discovery; and an Infomaniak SMTP transport for notification delivery. No fictional legal updates, preset scenario topics, recovery fixtures, artificial processing delay or local account backend are shipped.
 
 Profiles, source selections, pause/resume, notes, read/saved state, feedback, settings, passwords for sensitive-action confirmation, and deletion are server-backed. Only unfinished drafts are kept locally, under a key scoped to the authenticated account. Email/password registration requires a one-use mailbox verification link. Login uses server-side sessions with HttpOnly cookies. Password reset and changes revoke previous sessions and pending email changes. ChatGPT identity headers are ignored; neither ChatGPT nor Google is an authentication provider.
 
@@ -51,6 +51,8 @@ Updates and instant notification records commit together. URL uniqueness, proces
 Changing email requires the current password and a confirmation link to the new address. The old login and notification address stays active until confirmation; confirmation updates both atomically and revokes old sessions. Existing accounts from the earlier authentication system retain their profiles when the same email address is verified during registration or password reset. Account deletion cascades to profiles, updates, source checks, pending deliveries and verification requests. Export includes retained account data and source-check status without credential material.
 
 ## Source coverage and limits
+
+Public discovery uses a dedicated server token at `SEARCH_SERVICE_URL`, backed by the owner's existing local SearXNG deployment. There is no paid Search1API fallback. The token stays server-side and grants only public search, not access to Helvetic Lens accounts or dossiers. Profile-scoped search results are cached for an hour (10 minutes for partial engine results), so subsequent analysis batches reuse the search. Topic changes use a new cache key; deleting a profile cascades its cache. Empty successful results and unavailable engines remain distinct. Queries still go to the configured public search engines.
 
 Verified direct connectors: Fedlex RSS, ESTV and BSV public news APIs, Federal Administrative Court media releases, Zurich authority news, Swiss Startup Association RSS. Other federal/cantonal/association selections use searches scoped to official publisher domains, with retrieved text or explicitly labelled public search excerpts. Generic RSS/Atom and public newsletter archive URLs are supported. LinkedIn monitoring covers public indexed content only, not private posts or an authenticated LinkedIn subscription.
 

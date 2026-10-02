@@ -29,7 +29,7 @@ async function handle(request:Request){try{
   if(path[1]==='monitor-status')return json((await db.prepare("SELECT c.source_id,c.status,count(*) AS checks,min(c.next_run) AS next_run FROM source_checks c JOIN profiles p ON p.id=c.profile_id WHERE p.status='active' GROUP BY c.source_id,c.status").all()).results);
   if(path[1]==='deliveries')return json(await claimDeliveries());
   if(path[1]==='ack'){const input=z.object({id:z.string(),success:z.boolean(),error:z.string().optional(),unattempted:z.boolean().optional()}).parse(await body(request));await acknowledgeDelivery(input.id,input.success,input.error,input.unattempted);return json({ok:true});}
-  if(path[1]==='cleanup'){await cleanupAuth();await db.batch([db.prepare('DELETE FROM rate_limits WHERE expires_at<?').bind(Date.now()),db.prepare('DELETE FROM email_verifications WHERE expires_at<?').bind(Date.now())]);return json({ok:true});}
+  if(path[1]==='cleanup'){await cleanupAuth();await db.batch([db.prepare('DELETE FROM rate_limits WHERE expires_at<?').bind(Date.now()),db.prepare('DELETE FROM email_verifications WHERE expires_at<?').bind(Date.now()),db.prepare('DELETE FROM search_cache WHERE expires_at<?').bind(Date.now())]);return json({ok:true});}
   throw new HttpError(404,'Unknown job.');
  }
  if(path[0]==='verify-email'&&method==='GET')return new Response(null,{status:302,headers:{location:'/verify-email#change='+encodeURIComponent(url.searchParams.get('token')||''),'cache-control':'no-store','referrer-policy':'no-referrer'}});
